@@ -30,7 +30,7 @@ app.use(bodyParser.json({ limit: "100mb" }));
 // ✅ CORS setup — allows frontend + credentials
 const allowedOrigins = [
   "http://localhost:5173",
-  //"https://your-production-domain.com",
+  "https://mediform-ai.vercel.app/",
 ];
 app.use(
   cors({

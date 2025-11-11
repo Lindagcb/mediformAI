@@ -62,7 +62,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
   <img
     src="/Ubomi-Buhle.png"
     alt="Ubomi Buhle Logo"
-    className="h-24 w-auto object-contain mb-3"
+    className="h-48 w-auto object-contain mb-3"
   />
   <p className="text-2xl font-semibold text-[#008A80] tracking-wide leading-tight">
     Clinical Records AI Platform

@@ -1110,9 +1110,9 @@ return (
 
 
   <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3 space-y-3 text-xs">
-    {/* Row 1: LMP + Certain */}
+    {/* Row 1: LNMP + Certain */}
     <div className="grid grid-cols-2 gap-3">
-      {field("LMP", form.lnmp, (v) => updateForm({ lnmp: v }))}
+      {field("LNMP", form.lnmp, (v) => updateForm({ lnmp: v }))}
       {yesNoField("Certain?", form.certain, (v) => updateForm({ certain: v }))}
     </div>
 

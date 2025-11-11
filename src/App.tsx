@@ -76,7 +76,7 @@ const App: React.FC = () => {
     {/* Center: App title (now left-aligned within middle column) */}
     <div className="flex justify-start">
       <p className="text-4xl font-semibold text-[#008A80] tracking-wide">
-        Ubomi&nbsp;Insight&nbsp;AI
+        Clinical Records AI Platform
       </p>
     </div>
 

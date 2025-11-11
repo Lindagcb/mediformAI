@@ -53,19 +53,23 @@ export function Auth({ onAuthSuccess }: AuthProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#E6F5F4] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl border border-[#B3E0DC] shadow-lg overflow-hidden">
-          <div className="bg-[#E6F5F4] px-8 py-8 border-b border-[#B3E0DC]">
-            {/* ✅ Centered larger logo only */}
-            <div className="flex flex-col items-center justify-center">
-              <img
-                src="/Ubomi-Buhle.png"
-                alt="Ubomi Buhle Logo"
-                className="w-50 h-auto"
-              />
-            </div>
-          </div>
+  <div className="min-h-screen bg-[#E6F5F4] flex items-center justify-center p-4">
+    <div className="w-full max-w-md">
+      <div className="bg-white rounded-2xl border border-[#B3E0DC] shadow-lg overflow-hidden">
+        {/* Header with logo + heading */}
+        <div className="bg-[#E6F5F4] px-8 py-8 border-b border-[#B3E0DC]">
+          <div className="flex flex-col items-center justify-center text-center">
+  <img
+    src="/Ubomi-Buhle.png"
+    alt="Ubomi Buhle Logo"
+    className="h-24 w-auto object-contain mb-3"
+  />
+  <p className="text-2xl font-semibold text-[#008A80] tracking-wide leading-tight">
+    Clinical Records AI Platform
+  </p>
+</div>
+
+        </div>
 
           <div className="p-8">
             <form onSubmit={handleSubmit} className="space-y-5">

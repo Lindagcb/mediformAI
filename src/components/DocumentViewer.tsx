@@ -95,7 +95,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
   if (loading) {
     return (
       <div className="flex-1 bg-gray-100 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
+        <Loader2 className="w-8 h-8 text-[#008A80] animate-spin" />
       </div>
     );
   }

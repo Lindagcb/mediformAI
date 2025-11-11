@@ -1169,8 +1169,11 @@ await pool.query(
 app.get("/api/forms", verifyToken, async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, file_name, upload_date FROM forms ORDER BY upload_date DESC;`
-    );
+  `SELECT id, file_name, upload_date, has_issue, is_completed
+     FROM forms
+     ORDER BY upload_date DESC`
+);
+
     res.json(rows);
   } catch (err) {
     console.error("GET /api/forms error:", err);
@@ -1559,6 +1562,109 @@ app.get("/api/files/:container/:filename", async (req, res) => {
     }
   }
 });
+
+// =====================================
+// FORM ISSUE TRACKING ROUTES
+// =====================================
+
+// Create a new issue for a specific form
+app.post("/api/forms/:formId/issues", async (req, res) => {
+  const { formId } = req.params;
+  const { section_name, field_name, issue_description, created_by } = req.body;
+
+  if (!section_name || !issue_description) {
+    return res.status(400).json({ error: "section_name and issue_description are required" });
+  }
+
+  const id = uuidv4();
+
+  try {
+    await pool.query(
+      `INSERT INTO form_issues (id, form_id, section_name, field_name, issue_description, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [id, formId, section_name, field_name || null, issue_description, created_by || "system"]
+    );
+
+    // flag parent form
+    await pool.query(`UPDATE forms SET has_issue = TRUE WHERE id=$1`, [formId]);
+
+    res.json({ success: true, id });
+  } catch (err) {
+    console.error("❌ Error inserting issue:", err);
+    res.status(500).json({ error: "Failed to create issue" });
+  }
+});
+
+// Get all issues for a form
+app.get("/api/forms/:formId/issues", async (req, res) => {
+  const { formId } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM form_issues WHERE form_id=$1 ORDER BY resolved, created_at DESC`,
+      [formId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Error loading issues:", err);
+    res.status(500).json({ error: "Failed to load issues" });
+  }
+});
+
+// Resolve or unresolve an issue
+app.patch("/api/forms/:formId/issues/:issueId", async (req, res) => {
+  const { formId, issueId } = req.params;
+  const { resolved, resolved_by } = req.body;
+
+  try {
+    if (resolved) {
+      await pool.query(
+        `UPDATE form_issues
+           SET resolved = TRUE,
+               resolved_by = $1,
+               resolved_at = NOW()
+         WHERE id = $2 AND form_id = $3`,
+        [resolved_by || "system", issueId, formId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE form_issues
+           SET resolved = FALSE,
+               resolved_by = NULL,
+               resolved_at = NULL
+         WHERE id = $1 AND form_id = $2`,
+        [issueId, formId]
+      );
+    }
+
+    // recompute parent form flag
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS unresolved FROM form_issues WHERE form_id=$1 AND resolved=FALSE`,
+      [formId]
+    );
+    const stillHas = rows[0].unresolved > 0;
+    await pool.query(`UPDATE forms SET has_issue=$1 WHERE id=$2`, [stillHas, formId]);
+
+    res.json({ success: true, has_issue: stillHas });
+  } catch (err) {
+    console.error("❌ Error updating issue:", err);
+    res.status(500).json({ error: "Failed to update issue" });
+  }
+});
+
+// Mark/unmark a form as completed
+app.patch("/api/forms/:formId/completed", async (req, res) => {
+  const { formId } = req.params;
+  const { is_completed } = req.body;
+
+  try {
+    await pool.query(`UPDATE forms SET is_completed=$1 WHERE id=$2`, [!!is_completed, formId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Error updating completion flag:", err);
+    res.status(500).json({ error: "Failed to update completion flag" });
+  }
+});
+
 
 
 // =====================================

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Save, Trash2,Loader2, CheckCircle, Plus, X } from "lucide-react";
 
 interface DataPanelProps {
@@ -17,21 +17,28 @@ const DataPanel: React.FC<DataPanelProps> = ({ formId }) => {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [issues, setIssues] = useState<any[]>([]);
+  const [isCompleted, setIsCompleted] = useState(false);
+
+
 
   // ---------------------- Load full form ----------------------
 useEffect(() => {
-  if (!formId || formId === "null") return;
+  // always run this hook; just skip fetching if formId invalid
+  if (!formId || formId === "null") {
+    return; // ✅ safe early exit
+  }
 
-  (async () => {
+  const fetchForm = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-const res = await fetch(`${API_BASE}/forms/${formId}`, {
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`, // ✅ add JWT
-  },
-});
+      const res = await fetch(`${API_BASE}/forms/${formId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`, // ✅ add JWT
+        },
+      });
 
       const data = await res.json();
 
@@ -76,16 +83,35 @@ const res = await fetch(`${API_BASE}/forms/${formId}`, {
       setObstetric(data.obstetric || []);
       setInvestigations(data.investigations || []);
       setCounselling(data.counselling || []);
+      setIsCompleted(!!data.form?.is_completed);
     } catch (err) {
       console.error("❌ Error loading form:", err);
     } finally {
       setLoading(false);
     }
-  })();
+  };
+
+  // ✅ call the async function
+  fetchForm();
 }, [formId]);
 
 
-
+useEffect(() => {
+  const fetchIssues = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load issues");
+      const data = await res.json();
+      setIssues(data);
+    } catch (err) {
+      console.error("❌ Error fetching issues:", err);
+    }
+  };
+  if (formId) fetchIssues();
+}, [formId]);
 
 
 
@@ -93,16 +119,25 @@ const res = await fetch(`${API_BASE}/forms/${formId}`, {
   const updateForm = (patch: Record<string, any>) =>
     setForm((prev: any) => ({ ...prev, ...patch }));
 
-  const field = (label: string, value: string | undefined, onChange: (v: string) => void) => (
-    <div>
-      <label className="block text-xs font-semibold text-gray-700 mb-1">{label}</label>
-      <input
-        value={value || ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500"
-      />
-    </div>
-  );
+  const field = (
+  label: string,
+  value: string | undefined,
+  onChange: (v: string) => void
+) => (
+  <div>
+    <label className="block text-xs font-semibold text-gray-700 mb-1">
+      {label}
+    </label>
+    <input
+      disabled={isCompleted} // ✅ disable if form is completed
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-full px-3 py-1.5 text-sm border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500
+        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+    />
+  </div>
+);
+
 
   const yesNoField = (label: string, value: string | undefined, onChange: (v: string) => void) => (
     <div className="flex items-center justify-between">
@@ -133,15 +168,17 @@ const res = await fetch(`${API_BASE}/forms/${formId}`, {
 const handleSave = async () => {
   setSaving(true);
   setSaveSuccess(false);
+
   try {
-    // ✅ Package investigations back into an array before sending
+    const token = localStorage.getItem("token");
+
     const payload = {
       form,
       obstetric,
       investigations: [
         {
           ...investigations[0],
-          ...form, // merge form fields (includes Hb, Rhesus, etc.)
+          ...form,
         },
       ],
       counselling,
@@ -149,29 +186,34 @@ const handleSave = async () => {
 
     const res = await fetch(`${API_BASE}/forms/${formId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(payload),
     });
 
-    if (!res.ok) throw new Error("Save failed");
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("❌ Save failed:", res.status, text);
+      throw new Error("Save failed");
+    }
+
+    // ✅ THIS is your original popup
+    alert("Saved successfully");
+
+    // ✅ Keep your old visual success animation
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
+
   } catch (err) {
     console.error("Error saving form:", err);
-    alert("Save failed");
+    alert("Save failed"); // same as before
   } finally {
     setSaving(false);
   }
 };
 
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 text-purple-600 animate-spin" />
-      </div>
-    );
-  }
 
 const handleDelete = async () => {
   if (!confirm("Are you sure you want to delete this form? This cannot be undone.")) return;
@@ -189,10 +231,112 @@ const handleDelete = async () => {
   }
 };
 
+const markAsCompleted = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE}/forms/${formId}/completed`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ is_completed: true }),
+    });
+    if (!res.ok) throw new Error("Failed");
+    alert("✅ Form marked as completed!");
+  } catch (err) {
+    console.error("❌ Error marking completed:", err);
+    alert("Error marking as completed.");
+  }
+};
+
+const flagIssue = async () => {
+  const description = prompt("Describe the issue found in this form:");
+  if (!description) return;
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        section_name: "General Form",
+        issue_description: description,
+      }),
+    });
+    if (!res.ok) throw new Error("Failed");
+    alert("⚠️ Issue flagged — form now listed under 'Needs Review'");
+  } catch (err) {
+    console.error("❌ Error flagging issue:", err);
+    alert("Error flagging issue.");
+  }
+};
+
+const flagSectionIssue = async (sectionName: string) => {
+  const description = prompt(`Describe the issue found in "${sectionName}"`);
+  if (!description) return;
+
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        section_name: sectionName,
+        issue_description: description,
+      }),
+    });
+    if (!res.ok) throw new Error("Failed");
+    alert(`⚠️ Issue flagged in section "${sectionName}"`);
+  } catch (err) {
+    console.error("❌ Error flagging section issue:", err);
+    alert("Could not flag issue.");
+  }
+};
+
+const resolveIssue = async (issueId: string) => {
+  try {
+    const token = localStorage.getItem("token");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+    const res = await fetch(`${API_BASE}/forms/${formId}/issues/${issueId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        resolved: true,
+        resolved_by: user.username || "system",
+      }),
+    });
+
+    if (!res.ok) throw new Error("Failed to resolve issue");
+
+    // ✅ Update local state so the issue disappears
+    setIssues((prev) =>
+      prev.map((x) => (x.id === issueId ? { ...x, resolved: true } : x))
+    );
+
+    alert("✅ Issue marked as resolved");
+    setTimeout(() => window.dispatchEvent(new Event("refreshForms")), 200);
+  } catch (err) {
+    console.error("❌ Error resolving issue:", err);
+    alert("Error marking issue as resolved");
+  }
+};
+
+
+
 
 
   // ---------------------- UI ----------------------
-  return (
+return (
   <div className="w-1/3 bg-white border-l border-purple-200 flex flex-col">
     {/* Header bar with delete button */}
     <div className="px-4 py-3 border-b border-gray-200 bg-white">
@@ -222,13 +366,70 @@ const handleDelete = async () => {
       </p>
     </div>
 
-    {/* Scrollable content */}
-    <div className="flex-1 overflow-y-auto p-4 space-y-6">
+    {/* Scrollable content — always show form */}
+<div className="flex-1 overflow-y-auto p-4 space-y-6">
+  {isCompleted && (
+    <div className="mb-4 text-center">
+      <p className="text-green-700 font-semibold">
+        ✅ This form has been marked as completed
+      </p>
+      <p className="text-gray-600 text-sm">
+        It is now read-only and cannot be edited.
+      </p>
+    </div>
+  )}
       {/* 1️⃣ Header Identification */}
       <section>
-        <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-          Header Identification
+        <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+          <span>General Information</span>
+          <button
+            onClick={() => flagSectionIssue("General Information")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
         </h4>
+
+        {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "General Information" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
+
+
         <div className="grid grid-cols-2 gap-3">
           {field("Healthcare Worker Name", form.healthcare_worker_name, (v) =>
             updateForm({ healthcare_worker_name: v })
@@ -250,10 +451,55 @@ const handleDelete = async () => {
       </section>
 
         {/* 2️⃣ Obstetric & Neonatal History */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Obstetric and Neonatal History
-  </h4>
+        <section>
+          <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+          <span>Obstetric and Neonatal History</span>
+          <button
+            onClick={() => flagSectionIssue("Obstetric and Neonatal History")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
+        </h4>
+        {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Obstetric and Neonatal History" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
+
 
   <div className="bg-purple-50 border border-purple-200 rounded-lg p-2">
     <table className="w-full text-xs border-collapse">
@@ -343,10 +589,54 @@ const handleDelete = async () => {
 
 
         {/* 3️⃣ Medical, General & Family History */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Medical, General & Family History
-  </h4>
+        <section>
+              <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+              <span>Medical and General History</span>
+              <button
+                onClick={() => flagSectionIssue("Medical and General History")}
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </h4>
+            {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Medical, General and Family History" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
   <div className="space-y-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
     {/* --- Medical & General --- */}
@@ -458,74 +748,207 @@ const handleDelete = async () => {
 </section>
 
         {/* 4️⃣ Examination */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Examination
-  </h4>
+          <section>
+            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>Examination</span>
+            <button
+              onClick={() => flagSectionIssue("Examination")}
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </h4>
+            {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Examination" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
 
-  <div className="grid grid-cols-2 gap-3">
-    {[
-      "bp",
-      "urine",
-      "height",
-      "weight",
-      "muac",
-      "bmi",
-      "thyroid",
-      "breasts",
-      "heart",
-      "lungs",
-      "abdomen",
-      "sf_measurement_at_booking",
-    ].map((f) =>
-      field(
-        f.replace(/_/g, " ").toUpperCase(),
-        form[f],
-        (v) => updateForm({ [f]: v })
-      )
-    )}
-  </div>
-</section>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                "bp",
+                "urine",
+                "height",
+                "weight",
+                "muac",
+                "bmi",
+                "thyroid",
+                "breasts",
+                "heart",
+                "lungs",
+                "abdomen",
+                "sf_measurement_at_booking",
+              ].map((f) =>
+                field(
+                  f.replace(/_/g, " ").toUpperCase(),
+                  form[f],
+                  (v) => updateForm({ [f]: v })
+                )
+              )}
+            </div>
+          </section>
 
 
         {/* 5️⃣ Vaginal Examination */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Vaginal Examination
-  </h4>
+          <section>
+            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>Vaginal Examination</span>
+            <button
+              onClick={() => flagSectionIssue("Vaginal Examination")}
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </h4>
+                {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Vaginal Examination" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
 
-  <div className="grid grid-cols-2 gap-3">
-    {field(
-      "Permission Obtained",
-      form.permission_obtained,
-      (v) => updateForm({ permission_obtained: v })
-    )}
-    {field(
-      "Vulva and Vagina",
-      form.vulva_and_vagina,
-      (v) => updateForm({ vulva_and_vagina: v })
-    )}
-    {field("Cervix", form.cervix, (v) => updateForm({ cervix: v }))}
-    {field("Uterus", form.uterus, (v) => updateForm({ uterus: v }))}
-    {yesNoField(
-      "Pap Smear Done",
-      form.pap_smear_done,
-      (v) => updateForm({ pap_smear_done: v })
-    )}
-    {field(
-      "Pap Smear Result",
-      form.pap_smear_result,
-      (v) => updateForm({ pap_smear_result: v })
-    )}
-  </div>
-</section>
+
+            <div className="grid grid-cols-2 gap-3">
+              {field(
+                "Permission Obtained",
+                form.permission_obtained,
+                (v) => updateForm({ permission_obtained: v })
+              )}
+              {field(
+                "Vulva and Vagina",
+                form.vulva_and_vagina,
+                (v) => updateForm({ vulva_and_vagina: v })
+              )}
+              {field("Cervix", form.cervix, (v) => updateForm({ cervix: v }))}
+              {field("Uterus", form.uterus, (v) => updateForm({ uterus: v }))}
+              {yesNoField(
+                "Pap Smear Done",
+                form.pap_smear_done,
+                (v) => updateForm({ pap_smear_done: v })
+              )}
+              {field(
+                "Pap Smear Result",
+                form.pap_smear_result,
+                (v) => updateForm({ pap_smear_result: v })
+              )}
+            </div>
+          </section>
 
 
         {/* 6️⃣ Investigations (final corrected layout) */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Investigations
-  </h4>
+        <section>
+          <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+          <span>Investigations</span>
+          <button
+            onClick={() => flagSectionIssue("Investigations")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
+        </h4>
+
+        {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Investigations" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
   <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-3">
     {/* Syphilis */}
@@ -637,10 +1060,54 @@ const handleDelete = async () => {
 
 
         {/* 7️⃣ Gestational Age (corrected full layout) */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Gestational Age
-  </h4>
+        <section>
+          <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+          <span>Gestational Age</span>
+          <button
+            onClick={() => flagSectionIssue("Gestational Age")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
+        </h4>
+        {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Gestational Age" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
   <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-3 text-xs">
     {/* Row 1: LMP + Certain */}
@@ -718,10 +1185,54 @@ const handleDelete = async () => {
 
 
         {/* 9️⃣ Mental Health (corrected layout) */}
-<section>
-  <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-    Mental Health
-  </h4>
+        <section>
+          <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+          <span>Mental Health</span>
+          <button
+            onClick={() => flagSectionIssue("Mental Health")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
+        </h4>
+        {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Mental Health" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
   <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-3 text-xs">
     {/* Row 1: Mental health screening + score */}
@@ -756,9 +1267,54 @@ const handleDelete = async () => {
 
         {/* 🔟 Birth Companion */}
           <section>
-            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-              Birth Companion
-            </h4>
+            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>Birth Companion</span>
+            <button
+              onClick={() => flagSectionIssue("Birth Companion")}
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </h4>
+
+          {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Birth Companion" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
               {yesNoField(
@@ -772,9 +1328,15 @@ const handleDelete = async () => {
 
         {/* 11️⃣ Counselling */}
           <section>
-            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-              Counselling
-            </h4>
+            <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>Counselling</span>
+            <button
+              onClick={() => flagSectionIssue("Counselling")}
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </h4>
 
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 overflow-x-auto">
               <table className="w-full border-collapse text-xs">
@@ -824,12 +1386,59 @@ const handleDelete = async () => {
 
         {/* 12️⃣ Future Contraception (checkbox version – matches MCR) */}
         <section>
-          <h4 className="text-xs font-bold text-purple-800 mb-1 uppercase tracking-wide">
+         <h4 className="text-xs font-bold text-purple-800 mb-1 uppercase tracking-wide flex justify-between items-center">
+          <span>
             Future Contraception
             <span className="ml-1 font-normal text-[11px] text-purple-600">
               (Provide dual protection)
             </span>
-          </h4>
+          </span>
+          <button
+            onClick={() => flagSectionIssue("Future Contraception")}
+            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          >
+            ⚠️ Flag Issue
+          </button>
+        </h4>
+
+      {/* === Display unresolved issues for this section === */}
+{issues
+  .filter((i) => i.section_name === "Future Contraception" && !i.resolved)
+  .map((i) => (
+    <div
+      key={i.id}
+      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+    >
+      ⚠️ {i.issue_description}
+      {i.created_by && (
+        <div className="text-[10px] text-amber-600 mt-1">
+          Reported by {i.created_by}
+        </div>
+      )}
+      <button
+        onClick={async () => {
+          const token = localStorage.getItem("token");
+          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ resolved: true }),
+          });
+          setIssues((prev) =>
+            prev.map((x) =>
+              x.id === i.id ? { ...x, resolved: true } : x
+            )
+          );
+        }}
+        className="mt-1 text-[10px] text-blue-600 hover:underline"
+      >
+        Mark resolved
+      </button>
+    </div>
+  ))}
+
 
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-3 text-xs">
             {/* Row 1: Contraceptive methods as checkboxes */}
@@ -909,61 +1518,82 @@ const handleDelete = async () => {
 
 
         {/* 14️⃣ Footer */}
-        <section>
-          <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
-            Footer
-          </h4>
-          <div className="grid grid-cols-2 gap-3">
-            {field(
-              "Healthcare Worker Signature",
-              form.healthcare_worker_signature,
-              (v) => updateForm({ healthcare_worker_signature: v })
-            )}
-            {field("Date of Assessment", form.date_of_assessment, (v) =>
-              updateForm({ date_of_assessment: v })
-            )}
-          </div>
-          <div className="mt-3">
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Notes
-            </label>
-            <textarea
-              rows={3}
-              value={form.notes || ""}
-              onChange={(e) => updateForm({ notes: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-            />
-          </div>
-        </section>
-      </div>
-
-      {/* Save button */}
-      <div className="border-t border-gray-200 p-3 bg-white">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full flex items-center justify-center bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition-all disabled:opacity-50"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : saveSuccess ? (
-            <>
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Saved
-            </>
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              Save Changes
-            </>
+      <section>
+        <h4 className="text-xs font-bold text-purple-800 mb-3 uppercase tracking-wide">
+          Footer
+        </h4>
+        <div className="grid grid-cols-2 gap-3">
+          {field(
+            "Healthcare Worker Signature",
+            form.healthcare_worker_signature,
+            (v) => updateForm({ healthcare_worker_signature: v })
           )}
-        </button>
-      </div>
+          {field("Date of Assessment", form.date_of_assessment, (v) =>
+            updateForm({ date_of_assessment: v })
+          )}
+        </div>
+        <div className="mt-3">
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            Notes
+          </label>
+          <textarea
+            rows={3}
+            value={form.notes || ""}
+            onChange={(e) => updateForm({ notes: e.target.value })}
+            className="w-full px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+      </section>
     </div>
-  );
-};
+
+    {/* Buttons below the main form */}
+<div className="flex justify-center gap-4 mt-6 mb-6">
+  <button
+    onClick={markAsCompleted}
+    disabled={isCompleted}
+    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition disabled:opacity-50"
+  >
+    <span>✅</span> Mark as Completed
+  </button>
+
+  <button
+    onClick={flagIssue}
+    className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded hover:bg-amber-600 transition"
+  >
+    ⚠️ Flag Issue
+  </button>
+</div>
+
+{/* Save button */}
+<div className="border-t border-gray-200 p-3 bg-white">
+  <button
+    onClick={handleSave}
+    disabled={saving || isCompleted}
+    className="w-full flex items-center justify-center bg-purple-600 text-white py-2 rounded-lg font-semibold hover:bg-purple-700 transition-all disabled:opacity-50"
+  >
+    {saving ? (
+      <>
+        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+        Saving...
+      </>
+    ) : saveSuccess ? (
+      <>
+        <CheckCircle className="w-4 h-4 mr-2" />
+        Saved
+      </>
+    ) : (
+      <>
+        <Save className="w-4 h-4 mr-2" />
+        Save Changes
+      </>
+        )}
+  </button>
+</div> 
+
+
+</div> 
+
+); 
+}; 
 
 export default DataPanel;

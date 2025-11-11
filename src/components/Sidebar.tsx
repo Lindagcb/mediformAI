@@ -22,7 +22,10 @@ interface Form {
   id: string;
   file_name: string;
   upload_date: string;
+  has_issue?: boolean;
+  is_completed?: boolean;
 }
+
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001/api";
 
@@ -36,6 +39,9 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [forms, setForms] = useState<Form[]>([]);
   const [loading, setLoading] = useState(true);
+
+const [filter, setFilter] = useState<"all" | "completed" | "issues" | "in-progress">("all");
+
 
   // =========================================
   // ✅ Load forms from backend (with token)
@@ -76,8 +82,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   useEffect(() => {
-    loadForms();
-  }, [refreshTrigger]);
+  loadForms();
+
+  // ✅ Listen for refresh events triggered from DataPanel
+  const listener = () => loadForms();
+  window.addEventListener("refreshForms", listener);
+  return () => window.removeEventListener("refreshForms", listener);
+}, [refreshTrigger]);
 
   // =========================================
   // Date formatting helper
@@ -93,6 +104,17 @@ const Sidebar: React.FC<SidebarProps> = ({
       minute: "2-digit",
     });
   };
+
+  // =========================================
+// Filtered list based on backend flags
+// =========================================
+const filteredForms = forms.filter((f) => {
+  if (filter === "completed") return f.is_completed && !f.has_issue;
+  if (filter === "issues") return f.has_issue;
+  if (filter === "in-progress") return !f.is_completed && !f.has_issue;
+  return true;
+});
+
 
   // =========================================
   // Render
@@ -126,6 +148,35 @@ const Sidebar: React.FC<SidebarProps> = ({
             <UploadForm apiBase={API_BASE} onUploadComplete={onUploadComplete} />
           </div>
 
+            {/* === Filter bar (clean vertical layout, reordered) === */}
+            <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+              <div className="flex flex-col">
+                {[
+                  ["all", "All"],
+                  ["in-progress", "In Progress 🕓"],
+                  ["issues", "Needs Review ⚠️"],
+                  ["completed", "Completed ✅"],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key as any)}
+                    className={`w-full text-xs px-3 py-2 text-left font-medium transition-all border-0 border-b border-gray-200 last:border-b-0
+                      ${
+                        filter === key
+                          ? "bg-purple-50 text-purple-700 font-semibold"
+                          : "bg-transparent text-gray-700 hover:bg-gray-100"
+                      }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+
+
+
+
           <div className="flex-1 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
@@ -141,7 +192,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             ) : (
               <div>
-                {forms.map((form) => (
+                {/* === Filtered and flagged list === */}
+                {filteredForms.map((form) => (
                   <button
                     key={form.id}
                     onClick={() => onSelectForm(form.id)}
@@ -167,6 +219,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           }`}
                         />
                       </div>
+
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
                           {form.file_name}
@@ -177,6 +230,18 @@ const Sidebar: React.FC<SidebarProps> = ({
                             {formatDateTime(form.upload_date)}
                           </span>
                         </div>
+
+                        {/* === Status badges === */}
+                        {form.has_issue && (
+                          <div className="text-[11px] text-amber-700 mt-1">
+                            ⚠️ Needs review
+                          </div>
+                        )}
+                        {form.is_completed && !form.has_issue && (
+                          <div className="text-[11px] text-green-700 mt-1">
+                            ✅ Completed
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -184,6 +249,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
           </div>
+
         </>
       )}
 

@@ -132,8 +132,9 @@ useEffect(() => {
       disabled={isCompleted} // ✅ disable if form is completed
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80]
-        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+      className={`w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] text-gray-900
+  ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+
     />
   </div>
 );
@@ -670,7 +671,7 @@ return (
           onChange={(e) =>
             updateForm({ other_condition_detail: e.target.value })
           }
-          className="w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y"
+          className="w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y text-gray-900"
         />
       </div>
     </div>

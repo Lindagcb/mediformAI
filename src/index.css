@@ -13,3 +13,9 @@
     font-family: 'Outfit', system-ui, -apple-system, sans-serif;
   }
 }
+/* ✅ Global rule to make all form text black */
+input,
+textarea,
+select {
+  color: #111 !important;
+}

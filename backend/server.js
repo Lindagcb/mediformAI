@@ -30,14 +30,27 @@ app.use(bodyParser.json({ limit: "100mb" }));
 // ✅ CORS setup — allows frontend + credentials
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://mediform-ai.vercel.app/",
+  "https://mediform-ai.vercel.app",
 ];
+
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin(origin, callback) {
+      // allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      console.warn("❌ Blocked by CORS:", origin);
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
+
+// handle preflight manually (some browsers require this)
+app.options("*", cors());
+
 
 
 // =====================================

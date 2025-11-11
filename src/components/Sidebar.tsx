@@ -163,7 +163,7 @@ const filteredForms = forms.filter((f) => {
                     className={`w-full text-xs px-3 py-2 text-left font-medium transition-all border-0 border-b border-gray-200 last:border-b-0
                       ${
                         filter === key
-                          ? "bg-purple-50 text-purple-700 font-semibold"
+                          ? "bg-[#E6F5F4] text-[#008A80] font-semibold"
                           : "bg-transparent text-gray-700 hover:bg-gray-100"
                       }`}
                   >
@@ -199,7 +199,7 @@ const filteredForms = forms.filter((f) => {
                     onClick={() => onSelectForm(form.id)}
                     className={`w-full p-4 border-b border-gray-100 hover:bg-gray-50 transition-all text-left ${
                       selectedFormId === form.id
-                        ? "bg-purple-50 border-l-4 border-l-purple-600"
+                        ? "bg-[#E6F5F4] border-l-4 border-l-[#008A80]"
                         : ""
                     }`}
                   >
@@ -207,14 +207,14 @@ const filteredForms = forms.filter((f) => {
                       <div
                         className={`p-2 rounded-lg ${
                           selectedFormId === form.id
-                            ? "bg-purple-100"
+                            ? "bg-[#D2F0EE]"
                             : "bg-gray-100"
                         }`}
                       >
                         <FileText
                           className={`w-4 h-4 ${
                             selectedFormId === form.id
-                              ? "text-purple-600"
+                              ? "text-[#008A80]"
                               : "text-gray-600"
                           }`}
                         />
@@ -265,7 +265,7 @@ const filteredForms = forms.filter((f) => {
                   onClick={() => onSelectForm(form.id)}
                   className={`p-2 rounded-lg transition-all ${
                     selectedFormId === form.id
-                      ? "bg-purple-100"
+                      ? "bg-[#D2F0EE]"
                       : "bg-gray-100 hover:bg-gray-200"
                   }`}
                   title={form.file_name}
@@ -273,7 +273,7 @@ const filteredForms = forms.filter((f) => {
                   <FileText
                     className={`w-5 h-5 ${
                       selectedFormId === form.id
-                        ? "text-purple-600"
+                        ? "text-[#008A80]"
                         : "text-gray-600"
                     }`}
                   />

@@ -79,7 +79,7 @@ const UploadForm: React.FC<UploadFormProps> = ({ apiBase, onUploadComplete }) =>
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // 👈 this is the key line
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           filename: uploadName,
@@ -115,7 +115,7 @@ const UploadForm: React.FC<UploadFormProps> = ({ apiBase, onUploadComplete }) =>
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading}
-        className="w-full bg-purple-600 text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-purple-700 transition-all disabled:opacity-50 flex items-center justify-center text-sm"
+        className="w-full bg-[#008A80] text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-[#00776E] transition-all disabled:opacity-50 flex items-center justify-center text-sm"
       >
         {uploading ? (
           <>

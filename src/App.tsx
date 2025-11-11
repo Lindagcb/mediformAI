@@ -60,61 +60,69 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* HEADER */}
-      <header className="bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="bg-purple-600 p-2 rounded-lg">
-              <ClipboardList className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">MediformAI</h1>
-              <p className="text-xs text-gray-500">
-                AI-powered medical form extraction
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 px-3 py-2 bg-gray-100 rounded-lg">
-              <UserIcon className="w-4 h-4 text-gray-600" />
-              <span className="text-sm text-gray-700">
-                {user?.username || "Unknown User"}
-              </span>
-            </div>
-            <button
-              className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-              title="Sign Out"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* BODY */}
-      <div className="flex-1 flex overflow-hidden">
-        <Sidebar
-          apiBase={API_BASE}
-          onSelectForm={handleSelectForm}
-          onUploadComplete={handleUploadComplete}
-          selectedFormId={selectedFormId}
-          refreshTrigger={refreshTrigger}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        />
-        <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
-        <DataPanel
-          apiBase={API_BASE}
-          formId={selectedFormId}
-          onFormDeleted={handleFormDeleted}
-          onFormUpdated={() => setRefreshTrigger((p) => p + 1)}
-        />
-      </div>
+  <div className="h-screen flex flex-col bg-gray-50">
+    {/* HEADER */}
+    <header className="bg-white border-b border-[#B3E0DC] flex-shrink-0">
+  <div className="grid grid-cols-[20rem_1fr_auto] items-center px-8 py-6">
+    {/* Left: Ubomi Buhle logo */}
+    <div className="flex justify-center">
+      <img
+        src="/Ubomi-Buhle.png"
+        alt="Ubomi Buhle"
+        className="h-24 w-auto object-contain"
+      />
     </div>
-  );
+
+    {/* Center: App title (now left-aligned within middle column) */}
+    <div className="flex justify-start">
+      <p className="text-4xl font-semibold text-[#008A80] tracking-wide">
+        Ubomi&nbsp;Insight&nbsp;AI
+      </p>
+    </div>
+
+    {/* Right: User info + logout */}
+    <div className="flex items-center space-x-3 justify-end">
+      <div className="flex items-center space-x-2 px-3 py-2 bg-[#E6F5F4] rounded-lg border border-[#B3E0DC]">
+        <UserIcon className="w-4 h-4 text-[#008A80]" />
+        <span className="text-sm text-[#008A80]">
+          {user?.username || "Unknown User"}
+        </span>
+      </div>
+      <button
+        className="p-2 text-[#008A80] hover:bg-[#E6F5F4] rounded-lg transition-all"
+        title="Sign Out"
+        onClick={handleLogout}
+      >
+        <LogOut className="w-4 h-4" />
+      </button>
+    </div>
+  </div>
+</header>
+
+
+
+    {/* BODY */}
+    <div className="flex-1 flex overflow-hidden">
+      <Sidebar
+        apiBase={API_BASE}
+        onSelectForm={handleSelectForm}
+        onUploadComplete={handleUploadComplete}
+        selectedFormId={selectedFormId}
+        refreshTrigger={refreshTrigger}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+      <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
+      <DataPanel
+        apiBase={API_BASE}
+        formId={selectedFormId}
+        onFormDeleted={handleFormDeleted}
+        onFormUpdated={() => setRefreshTrigger((p) => p + 1)}
+      />
+    </div>
+  </div>
+);
+
 };
 
 export default App;

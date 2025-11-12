@@ -161,12 +161,18 @@ app.post("/api/logout", (req, res) => {
 // ----------------------------------------------------------
 function normalizeDate(value) {
   if (!value) return null;
-  const m = String(value).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (!m) return null;
+  const cleaned = String(value).trim().replace(/[.,]/g, "/");
+  const m = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (!m) {
+    console.warn("⚠️ Skipping unparsable date:", value);
+    return null;
+  }
   let [_, d, mth, y] = m;
-  if (y.length === 2) y = `20${y}`;        // assume 20xx for 2-digit years
+  if (y.length === 2) y = `20${y}`;
   return `${y.padStart(4, "0")}-${mth.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
+
+
 
 // -------------------------------------
 // Normalise Yes/No fields → always "Yes"/"No"/null for DB text fields
@@ -1112,40 +1118,43 @@ await pool.query(
     
 
     // ---- Counselling ----
-        const counselling =
-          extracted.sections?.find((s) => s.section_name === "Counselling")?.fields || {};
+const counselling =
+  extracted.sections?.find((s) => s.section_name === "Counselling")?.fields || {};
 
-        // ✅ Improved parsing to correctly capture "Topic", "Date 1", and "Date 2"
-        const counsellingRecords = Object.entries(counselling).reduce((acc, [key, val]) => {
-          // Match keys like "Counselling 1 Topic", "Counselling 1 Date 1", "Counselling 1 Date 2"
-          const match = key.match(/^Counselling\s+(\d+)\s+(Topic|Date\s*1|Date\s*2)$/i);
-          if (match) {
-            const [_, num, field] = match;
-            if (!acc[num]) acc[num] = { record_number: parseInt(num), form_id: formId };
+const counsellingRecords = Object.entries(counselling).reduce((acc, [key, val]) => {
+  // ✅ Match both "Counselling 1 Date 1" and "counselling_1_date_1"
+  const match = key.match(/^counselling[_\s]*(\d+)[_\s]*(topic|date[_\s]*1|date[_\s]*2)$/i);
+  if (match) {
+    const [, num, field] = match;
+    if (!acc[num]) acc[num] = { record_number: parseInt(num), form_id: formId };
 
-            if (/Topic/i.test(field)) acc[num].topic = val;
-            else if (/Date\s*1/i.test(field)) acc[num].date_1 = val;
-            else if (/Date\s*2/i.test(field)) acc[num].date_2 = val;
-          }
-          return acc;
-        }, {});
+    // ✅ Assign topic/date values case-insensitively
+    if (/topic/i.test(field)) acc[num].topic = val?.trim() || null;
+    else if (/date[_\s]*1/i.test(field)) acc[num].date_1 = val?.trim() || null;
+    else if (/date[_\s]*2/i.test(field)) acc[num].date_2 = val?.trim() || null;
+  }
+  return acc;
+}, {});
 
-        // ✅ Insert each counselling record
-        for (const record of Object.values(counsellingRecords)) {
-          await pool.query(
-            `INSERT INTO counselling
-              (id, form_id, record_number, topic, date_1, date_2)
-            VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              uuidv4(),
-              formId,
-              record.record_number,
-              record.topic || null,
-              normalizeDate(record.date_1),
-              normalizeDate(record.date_2),
-            ]
-          );
-        }
+// ✅ Debug: confirm parsing worked
+console.log("🧾 Parsed counselling records:", counsellingRecords);
+
+// ✅ Insert each counselling record
+for (const record of Object.values(counsellingRecords)) {
+  await pool.query(
+    `INSERT INTO counselling
+      (id, form_id, record_number, topic, date_1, date_2)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [
+      uuidv4(),
+      formId,
+      record.record_number,
+      record.topic || null,
+      normalizeDate(record.date_1),
+      normalizeDate(record.date_2),
+    ]
+  );
+}
 
 
     // =====================================

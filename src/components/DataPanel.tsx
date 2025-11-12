@@ -132,7 +132,7 @@ useEffect(() => {
       disabled={isCompleted} // ✅ disable if form is completed
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
-      className={`w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] text-gray-900
+      className={`w-full px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] text-gray-900
   ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
 
     />
@@ -338,7 +338,7 @@ const resolveIssue = async (issueId: string) => {
 
   // ---------------------- UI ----------------------
 return (
-  <div className="w-1/3 bg-white border-l border-primaryBorder flex flex-col">
+  <div className="w-1/3 bg-white border-l border-[#008A80] Border flex flex-col">
     {/* Header bar with delete button */}
     <div className="px-4 py-3 border-b border-gray-200 bg-white">
       <div className="flex items-center justify-between mb-2">
@@ -380,8 +380,8 @@ return (
     </div>
   )}
       {/* 1️⃣ Header Identification */}
-      <section>
-        <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+      <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+        <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>General Information</span>
           <button
             onClick={() => flagSectionIssue("General Information")}
@@ -452,8 +452,8 @@ return (
       </section>
 
         {/* 2️⃣ Obstetric & Neonatal History */}
-        <section>
-          <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Obstetric and Neonatal History</span>
           <button
             onClick={() => flagSectionIssue("Obstetric and Neonatal History")}
@@ -502,10 +502,10 @@ return (
 
 
 
-  <div className="text-[#008A80] border border-primaryBorder rounded-lg p-2">
+  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-2">
     <table className="w-full text-xs border-collapse">
       <thead>
-        <tr className="border-b border-primaryBorder">
+        <tr className="border-b border-[#008A80] Border">
           {[
             "#",
             "Year",
@@ -518,7 +518,7 @@ return (
           ].map((h) => (
             <th
               key={h}
-              className="p-1 text-left text-primary font-semibold"
+              className="p-1 text-left text-[#008A80]  font-semibold"
             >
               {h}
             </th>
@@ -528,7 +528,7 @@ return (
 
       <tbody>
         {obstetric.map((r, i) => (
-          <tr key={i} className="border-b border-primaryBorder">
+          <tr key={i} className="border-b border-[#008A80] Border">
             <td className="p-1 font-semibold text-[#008A80]">
               {r.record_number || i + 1}
             </td>
@@ -551,7 +551,7 @@ return (
                       )
                     )
                   }
-                  className="w-full border border-primaryBorder rounded px-1 py-0.5 text-xs"
+                  className="w-full border border-[#008A80] Border rounded px-1 py-0.5 text-xs"
                 />
               </td>
             ))}
@@ -562,7 +562,7 @@ return (
 
     {/* ✅ New: Description of Complications */}
     <div className="mt-3">
-      <label className="block text-[11px] font-semibold text-primary mb-1">
+      <label className="block text-[11px] font-semibold text-[#008A80]  mb-1">
         Descriptions of complications
       </label>
       <textarea
@@ -578,7 +578,7 @@ return (
         }
         rows={3}
         placeholder=""
-        className="w-full border border-primaryBorder rounded px-2 py-1 text-xs focus:ring-2 focus:ring-[#008A80]"
+        className="w-full border border-[#008A80] Border rounded px-2 py-1 text-xs focus:ring-2 focus:ring-[#008A80]"
       />
       <p className="text-[10px] text-[#008A80] mt-1">
         Use this to elaborate on any complications noted in the table above.
@@ -590,8 +590,8 @@ return (
 
 
         {/* 3️⃣ Medical, General & Family History */}
-        <section>
-              <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+              <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
               <span>Medical and General History</span>
               <button
                 onClick={() => flagSectionIssue("Medical and General History")}
@@ -639,7 +639,7 @@ return (
   ))}
 
 
-  <div className="space-y-3 text-[#008A80] border border-primaryBorder rounded-lg p-3">
+  <div className="space-y-3 text-[#008A80] border border-[#008A80] Border rounded-lg p-3">
     {/* --- Medical & General --- */}
     <div className="space-y-2">
       {[
@@ -671,13 +671,13 @@ return (
           onChange={(e) =>
             updateForm({ other_condition_detail: e.target.value })
           }
-          className="w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y text-gray-900"
+          className="w-full px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y text-gray-900"
         />
       </div>
     </div>
 
     {/* --- Family History --- */}
-    <div className="space-y-2 pt-2 border-t border-primaryBorder">
+    <div className="space-y-2 pt-2 border-t border-[#008A80] Border">
       <label className="block text-xs font-semibold text-gray-700 mb-1 uppercase">
         Family History
       </label>
@@ -705,13 +705,13 @@ return (
           onChange={(e) =>
             updateForm({ family_history_details: e.target.value })
           }
-          className="w-full px-3 py-1.5 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y"
+          className="w-full px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80] resize-y"
         />
       </div>
     </div>
 
     {/* --- Remaining items --- */}
-    <div className="space-y-2 pt-2 border-t border-primaryBorder">
+    <div className="space-y-2 pt-2 border-t border-[#008A80] Border">
       {field("Medication", form.medication, (v) =>
         updateForm({ medication: v })
       )}
@@ -749,8 +749,8 @@ return (
 </section>
 
         {/* 4️⃣ Examination */}
-          <section>
-            <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Examination</span>
             <button
               onClick={() => flagSectionIssue("Examination")}
@@ -824,8 +824,8 @@ return (
 
 
         {/* 5️⃣ Vaginal Examination */}
-          <section>
-            <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Vaginal Examination</span>
             <button
               onClick={() => flagSectionIssue("Vaginal Examination")}
@@ -901,8 +901,8 @@ return (
 
 
         {/* 6️⃣ Investigations (final corrected layout) */}
-        <section>
-          <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Investigations</span>
           <button
             onClick={() => flagSectionIssue("Investigations")}
@@ -951,7 +951,7 @@ return (
   ))}
 
 
-  <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3 space-y-3">
+  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-3 space-y-3">
     {/* Syphilis */}
     <div className="grid grid-cols-2 gap-3">
       {field("Syphilis Test Date", form.syphilis_test_date, (v) =>
@@ -1061,8 +1061,8 @@ return (
 
 
         {/* 7️⃣ Gestational Age (corrected full layout) */}
-        <section>
-          <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Gestational Age</span>
           <button
             onClick={() => flagSectionIssue("Gestational Age")}
@@ -1110,7 +1110,7 @@ return (
   ))}
 
 
-  <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3 space-y-3 text-xs">
+  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-3 space-y-3 text-xs">
     {/* Row 1: LNMP + Certain */}
     <div className="grid grid-cols-2 gap-3">
       {field("LNMP", form.lnmp, (v) => updateForm({ lnmp: v }))}
@@ -1186,8 +1186,8 @@ return (
 
 
         {/* 9️⃣ Mental Health (corrected layout) */}
-        <section>
-          <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Mental Health</span>
           <button
             onClick={() => flagSectionIssue("Mental Health")}
@@ -1235,7 +1235,7 @@ return (
   ))}
 
 
-  <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3 space-y-3 text-xs">
+  <div className="text-[#008A80] border border-[#008A80]Border rounded-lg p-3 space-y-3 text-xs">
     {/* Row 1: Mental health screening + score */}
     <div className="grid grid-cols-3 gap-3 items-center">
       {yesNoField(
@@ -1267,8 +1267,8 @@ return (
 
 
         {/* 🔟 Birth Companion */}
-          <section>
-            <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Birth Companion</span>
             <button
               onClick={() => flagSectionIssue("Birth Companion")}
@@ -1317,7 +1317,7 @@ return (
   ))}
 
 
-            <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3">
+            <div className="text-[#008A80] border border-[#008A80]Border rounded-lg p-3">
               {yesNoField(
                 "Discussed and Noted on MCR",
                 form.discussed,
@@ -1328,66 +1328,102 @@ return (
 
 
         {/* 11️⃣ Counselling */}
-          <section>
-            <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide flex justify-between items-center">
-            <span>Counselling</span>
-            <button
-              onClick={() => flagSectionIssue("Counselling")}
-              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+<section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+  <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
+    <span>Counselling</span>
+    <button
+      onClick={() => flagSectionIssue("Counselling")}
+      className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+    >
+      ⚠️ Flag Issue
+    </button>
+  </h4>
+
+  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-2 overflow-x-auto">
+    <table className="w-full border-collapse text-xs">
+      <thead>
+        <tr className="border-b-2 border-[#008A80] Border">
+          {["#", "Topic", "Date 1", "Date 2"].map((h) => (
+            <th
+              key={h}
+              className="text-left p-1.5 font-bold text-[#008A80]"
             >
-              ⚠️ Flag Issue
-            </button>
-          </h4>
+              {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
 
-            <div className="text-[#008A80] border border-primaryBorder rounded-lg p-2 overflow-x-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="border-b-2 border-primaryBorder">
-                    {["#", "Topic", "Date 1", "Date 2"].map((h) => (
-                      <th
-                        key={h}
-                        className="text-left p-1.5 font-bold text-primary"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+      <tbody>
+        {(() => {
+          // ✅ Default topics from the official MCR1 form
+          const defaultTopics = [
+            "Fetal movements",
+            "Parental preparedness",
+            "Nutrition",
+            "Danger signs",
+            "HIV",
+            "Mental health",
+            "Alcohol",
+            "Tobacco",
+            "Substances",
+            "Domestic violence",
+            "Labour and birth preparedness",
+            "Breast care",
+            "Infant feeding",
+          ];
 
-                <tbody>
-                  {counselling.map((row, i) => (
-                    <tr key={i} className="border-b border-primaryBorder">
-                      <td className="p-1.5 text-[#008A80] font-bold">
-                        {row.record_number ?? i + 1}
-                      </td>
-                      {["topic", "date_1", "date_2"].map((f) => (
-                        <td key={f} className="p-1.5">
-                          <input
-                            className="w-full border border-primaryBorder rounded px-1.5 py-1"
-                            value={row[f] || ""}
-                            onChange={(e) =>
-                              setCounselling((prev) =>
-                                prev.map((r, idx) =>
-                                  idx === i
-                                    ? { ...r, [f]: e.target.value }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          // ✅ Merge database rows with defaults
+          const merged = defaultTopics.map((topic, i) => {
+            const existing = counselling.find(
+              (row) => row.topic?.toLowerCase() === topic.toLowerCase()
+            );
+            return (
+              existing || {
+                record_number: i + 1,
+                topic,
+                date_1: "",
+                date_2: "",
+              }
+            );
+          });
+
+          // ✅ Render merged list
+          return merged.map((row, i) => (
+            <tr key={i} className="border-b border-[#008A80] Border">
+              <td className="p-1.5 text-[#008A80] font-bold">
+                {row.record_number ?? i + 1}
+              </td>
+              {["topic", "date_1", "date_2"].map((f) => (
+                <td key={f} className="p-1.5">
+                  <input
+                    className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                    value={row[f] || ""}
+                    onChange={(e) =>
+                      setCounselling((prev) =>
+                        prev.map((r, idx) =>
+                          idx === i
+                            ? { ...r, [f]: e.target.value }
+                            : r
+                        )
+                      )
+                    }
+                  />
+                </td>
+              ))}
+            </tr>
+          ));
+        })()}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 
 
         {/* 12️⃣ Future Contraception (checkbox version – matches MCR) */}
-        <section>
-         <h4 className="text-xs font-bold text-primary mb-1 uppercase tracking-wide flex justify-between items-center">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+         <h4 className="text-xs font-bold text-[#008A80]  mb-1 uppercase tracking-wide flex justify-between items-center">
           <span>
             Future Contraception
             <span className="ml-1 font-normal text-[11px] text-[#008A80]">
@@ -1441,7 +1477,7 @@ return (
   ))}
 
 
-          <div className="text-[#008A80] border border-primaryBorder rounded-lg p-3 space-y-3 text-xs">
+          <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-3 space-y-3 text-xs">
             {/* Row 1: Contraceptive methods as checkboxes */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               {[
@@ -1494,12 +1530,12 @@ return (
 
 
         {/* 13️⃣ Booking Visit and Assessment */}
-        <section>
-          <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide">
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide">
             Booking Visit and Assessment
           </h4>
 
-          <div className="grid grid-cols-2 gap-3 text-[#008A80] border border-primaryBorder rounded-lg p-3">
+          <div className="grid grid-cols-2 gap-3 text-[#008A80] border border-[#008A80] Border rounded-lg p-3">
             {field("Done By", form.booking_done_by, (v) =>
               updateForm({ booking_done_by: v })
             )}
@@ -1519,8 +1555,8 @@ return (
 
 
         {/* 14️⃣ Footer */}
-      <section>
-        <h4 className="text-xs font-bold text-primary mb-3 uppercase tracking-wide">
+      <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+        <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide">
           Footer
         </h4>
         <div className="grid grid-cols-2 gap-3">
@@ -1541,7 +1577,7 @@ return (
             rows={3}
             value={form.notes || ""}
             onChange={(e) => updateForm({ notes: e.target.value })}
-            className="w-full px-3 py-2 text-sm border border-primaryBorder rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80]"
+            className="w-full px-3 py-2 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80]"
           />
         </div>
       </section>

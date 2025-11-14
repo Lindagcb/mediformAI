@@ -1605,8 +1605,15 @@ app.post("/api/forms/:formId/issues", async (req, res) => {
 });
 
 // Get all issues for a form
+// Get all issues for a form
 app.get("/api/forms/:formId/issues", async (req, res) => {
   const { formId } = req.params;
+
+  // 🚫 PREVENT INVALID UUID → important fix
+  if (!formId || formId === "null") {
+    return res.status(200).json([]); 
+  }
+
   try {
     const { rows } = await pool.query(
       `SELECT * FROM form_issues WHERE form_id=$1 ORDER BY resolved, created_at DESC`,
@@ -1618,6 +1625,7 @@ app.get("/api/forms/:formId/issues", async (req, res) => {
     res.status(500).json({ error: "Failed to load issues" });
   }
 });
+
 
 // Resolve or unresolve an issue
 app.patch("/api/forms/:formId/issues/:issueId", async (req, res) => {

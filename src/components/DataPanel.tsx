@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Save, Trash2,Loader2, CheckCircle, Plus, X } from "lucide-react";
-
+import IssueFlagTrigger from "./IssueFlagTrigger";
 interface DataPanelProps {
   formId: string;
 }
@@ -97,21 +97,32 @@ useEffect(() => {
 
 
 useEffect(() => {
+  // 🚫 Prevent any API call if formId is null, undefined, or "null"
+  if (!formId || formId === "null") {
+    setIssues([]); // ensure issues is always an array
+    return;
+  }
+
   const fetchIssues = async () => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to load issues");
+
       const data = await res.json();
-      setIssues(data);
+
+      // Ensure issues is always an array to avoid `.filter` crashing
+      setIssues(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error("❌ Error fetching issues:", err);
+      console.error("❌ Error loading issues:", err);
+      setIssues([]); // fallback to safe empty list
     }
   };
-  if (formId) fetchIssues();
+
+  fetchIssues();
 }, [formId]);
+
 
 
 
@@ -251,54 +262,19 @@ const markAsCompleted = async () => {
   }
 };
 
-const flagIssue = async () => {
-  const description = prompt("Describe the issue found in this form:");
-  if (!description) return;
+const refreshIssues = async () => {
   try {
     const token = localStorage.getItem("token");
     const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        section_name: "General Form",
-        issue_description: description,
-      }),
+      headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) throw new Error("Failed");
-    alert("⚠️ Issue flagged — form now listed under 'Needs Review'");
+    const data = await res.json();
+    setIssues(data);
   } catch (err) {
-    console.error("❌ Error flagging issue:", err);
-    alert("Error flagging issue.");
+    console.error("❌ Error refreshing issues:", err);
   }
 };
 
-const flagSectionIssue = async (sectionName: string) => {
-  const description = prompt(`Describe the issue found in "${sectionName}"`);
-  if (!description) return;
-
-  try {
-    const token = localStorage.getItem("token");
-    const res = await fetch(`${API_BASE}/forms/${formId}/issues`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        section_name: sectionName,
-        issue_description: description,
-      }),
-    });
-    if (!res.ok) throw new Error("Failed");
-    alert(`⚠️ Issue flagged in section "${sectionName}"`);
-  } catch (err) {
-    console.error("❌ Error flagging section issue:", err);
-    alert("Could not flag issue.");
-  }
-};
 
 const resolveIssue = async (issueId: string) => {
   try {
@@ -380,87 +356,88 @@ return (
     </div>
   )}
       {/* 1️⃣ Header Identification */}
-      <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
-        <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
-          <span>General Information</span>
-          <button
-            onClick={() => flagSectionIssue("General Information")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
-          >
-            ⚠️ Flag Issue
-          </button>
-        </h4>
+        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+          <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>General Information</span>
 
-        {/* === Display unresolved issues for this section === */}
-{issues
-  .filter((i) => i.section_name === "General Information" && !i.resolved)
-  .map((i) => (
-    <div
-      key={i.id}
-      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
-    >
-      ⚠️ {i.issue_description}
-      {i.created_by && (
-        <div className="text-[10px] text-amber-600 mt-1">
-          Reported by {i.created_by}
-        </div>
-      )}
-      <button
-        onClick={async () => {
-          const token = localStorage.getItem("token");
-          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ resolved: true }),
-          });
-          setIssues((prev) =>
-            prev.map((x) =>
-              x.id === i.id ? { ...x, resolved: true } : x
-            )
-          );
-        }}
-        className="mt-1 text-[10px] text-blue-600 hover:underline"
-      >
-        Mark resolved
-      </button>
-    </div>
-  ))}
+            {/* NEW: Wrap your existing button with IssueFlagTrigger */}
+            <IssueFlagTrigger
+              section="General Information"
+              formId={formId}
+              onSaved={refreshIssues}
+            >
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
+          </h4>
 
+          {/* === Display unresolved issues for this section === */}
+          {issues
+            .filter((i) => i.section_name === "General Information" && !i.resolved)
+            .map((i) => (
+              <div
+                key={i.id}
+                className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+              >
+                ⚠️ {i.issue_description}
 
+                {i.created_by && (
+                  <div className="text-[10px] text-amber-600 mt-1">
+                    Reported by {i.created_by}
+                  </div>
+                )}
 
-        <div className="grid grid-cols-2 gap-3">
-          {field("Healthcare Worker Name", form.healthcare_worker_name, (v) =>
-            updateForm({ healthcare_worker_name: v })
-          )}
-          {field("Clinic", form.clinic, (v) => updateForm({ clinic: v }))}
-          {field("Folder Number", form.folder_number, (v) =>
-            updateForm({ folder_number: v })
-          )}
-          {field("Patient Name", form.patient_name, (v) =>
-            updateForm({ patient_name: v })
-          )}
-          {field("Age", form.age, (v) => updateForm({ age: v }))}
-          {field("Gravida", form.gravida, (v) => updateForm({ gravida: v }))}
-          {field("Para", form.para, (v) => updateForm({ para: v }))}
-          {field("Miscarriages", form.miscarriages, (v) =>
-            updateForm({ miscarriages: v })
-          )}
-        </div>
-      </section>
+                {/* Resolve button stays EXACTLY as before */}
+                <button
+                  onClick={() => resolveIssue(i.id)}
+                  className="mt-1 text-[10px] text-blue-600 hover:underline"
+                >
+                  Mark resolved
+                </button>
+              </div>
+            ))}
+
+          {/* --- Rest of the section fields --- */}
+          <div className="grid grid-cols-2 gap-3">
+            {field("Healthcare Worker Name", form.healthcare_worker_name, (v) =>
+              updateForm({ healthcare_worker_name: v })
+            )}
+            {field("Clinic", form.clinic, (v) => updateForm({ clinic: v }))}
+            {field("Folder Number", form.folder_number, (v) =>
+              updateForm({ folder_number: v })
+            )}
+            {field("Patient Name", form.patient_name, (v) =>
+              updateForm({ patient_name: v })
+            )}
+            {field("Age", form.age, (v) => updateForm({ age: v }))}
+            {field("Gravida", form.gravida, (v) => updateForm({ gravida: v }))}
+            {field("Para", form.para, (v) => updateForm({ para: v }))}
+            {field("Miscarriages", form.miscarriages, (v) =>
+              updateForm({ miscarriages: v })
+            )}
+          </div>
+        </section>
+
 
         {/* 2️⃣ Obstetric & Neonatal History */}
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
           <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Obstetric and Neonatal History</span>
-          <button
-            onClick={() => flagSectionIssue("Obstetric and Neonatal History")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
-          >
-            ⚠️ Flag Issue
-          </button>
+          <IssueFlagTrigger
+              section="Obstetric and Neonatal History"
+              formId={formId}
+              onSaved={refreshIssues}
+            >
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
+
         </h4>
         {/* === Display unresolved issues for this section === */}
 {issues
@@ -593,12 +570,18 @@ return (
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
               <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide flex justify-between items-center">
               <span>Medical and General History</span>
-              <button
-                onClick={() => flagSectionIssue("Medical and General History")}
-                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
-              >
-                ⚠️ Flag Issue
-              </button>
+              <IssueFlagTrigger
+                  section="Medical and General History"
+                  formId={formId}
+                  onSaved={refreshIssues}
+                >
+                  <button
+                    className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+                  >
+                    ⚠️ Flag Issue
+                  </button>
+                </IssueFlagTrigger>
+
             </h4>
             {/* === Display unresolved issues for this section === */}
 {issues
@@ -752,12 +735,18 @@ return (
           <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
             <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Examination</span>
-            <button
-              onClick={() => flagSectionIssue("Examination")}
-              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            <IssueFlagTrigger
+              section="Examination"
+              formId={formId}
+              onSaved={refreshIssues}
             >
-              ⚠️ Flag Issue
-            </button>
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
+
           </h4>
             {/* === Display unresolved issues for this section === */}
 {issues
@@ -827,12 +816,18 @@ return (
           <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
             <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Vaginal Examination</span>
-            <button
-              onClick={() => flagSectionIssue("Vaginal Examination")}
-              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            <IssueFlagTrigger
+              section="Vaginal Examination"
+              formId={formId}
+              onSaved={refreshIssues}
             >
-              ⚠️ Flag Issue
-            </button>
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
+
           </h4>
                 {/* === Display unresolved issues for this section === */}
 {issues
@@ -904,12 +899,18 @@ return (
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
           <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Investigations</span>
-          <button
-            onClick={() => flagSectionIssue("Investigations")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          <IssueFlagTrigger
+            section="Investigations"
+            formId={formId}
+            onSaved={refreshIssues}
           >
-            ⚠️ Flag Issue
-          </button>
+            <button
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </IssueFlagTrigger>
+
         </h4>
 
         {/* === Display unresolved issues for this section === */}
@@ -1064,12 +1065,18 @@ return (
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
           <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Gestational Age</span>
-          <button
-            onClick={() => flagSectionIssue("Gestational Age")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+          <IssueFlagTrigger
+            section="Gestational Age"
+            formId={formId}
+            onSaved={refreshIssues}
           >
-            ⚠️ Flag Issue
-          </button>
+            <button
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </IssueFlagTrigger>
+
         </h4>
         {/* === Display unresolved issues for this section === */}
 {issues
@@ -1189,12 +1196,18 @@ return (
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
           <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
           <span>Mental Health</span>
-          <button
-            onClick={() => flagSectionIssue("Mental Health")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            <IssueFlagTrigger
+            section="Mental Health"
+            formId={formId}
+            onSaved={refreshIssues}
           >
-            ⚠️ Flag Issue
-          </button>
+            <button
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </IssueFlagTrigger>
+
         </h4>
         {/* === Display unresolved issues for this section === */}
 {issues
@@ -1270,12 +1283,18 @@ return (
           <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
             <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
             <span>Birth Companion</span>
-            <button
-              onClick={() => flagSectionIssue("Birth Companion")}
-              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              <IssueFlagTrigger
+              section="Birth Companion"
+              formId={formId}
+              onSaved={refreshIssues}
             >
-              ⚠️ Flag Issue
-            </button>
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
+
           </h4>
 
           {/* === Display unresolved issues for this section === */}
@@ -1328,97 +1347,67 @@ return (
 
 
         {/* 11️⃣ Counselling */}
-<section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
-  <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
-    <span>Counselling</span>
-    <button
-      onClick={() => flagSectionIssue("Counselling")}
-      className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
-    >
-      ⚠️ Flag Issue
-    </button>
-  </h4>
-
-  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-2 overflow-x-auto">
-    <table className="w-full border-collapse text-xs">
-      <thead>
-        <tr className="border-b-2 border-[#008A80] Border">
-          {["#", "Topic", "Date 1", "Date 2"].map((h) => (
-            <th
-              key={h}
-              className="text-left p-1.5 font-bold text-[#008A80]"
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
+            <span>Counselling</span>
+            <IssueFlagTrigger
+              section="Counselling"
+              formId={formId}
+              onSaved={refreshIssues}
             >
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
+              <button
+                className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+              >
+                ⚠️ Flag Issue
+              </button>
+            </IssueFlagTrigger>
 
-      <tbody>
-        {(() => {
-          // ✅ Default topics from the official MCR1 form
-          const defaultTopics = [
-            "Fetal movements",
-            "Parental preparedness",
-            "Nutrition",
-            "Danger signs",
-            "HIV",
-            "Mental health",
-            "Alcohol",
-            "Tobacco",
-            "Substances",
-            "Domestic violence",
-            "Labour and birth preparedness",
-            "Breast care",
-            "Infant feeding",
-          ];
+          </h4>
 
-          // ✅ Merge database rows with defaults
-          const merged = defaultTopics.map((topic, i) => {
-            const existing = counselling.find(
-              (row) => row.topic?.toLowerCase() === topic.toLowerCase()
-            );
-            return (
-              existing || {
-                record_number: i + 1,
-                topic,
-                date_1: "",
-                date_2: "",
-              }
-            );
-          });
+            <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-2 overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b-2 border-[#008A80] Border">
+                    {["#", "Topic", "Date 1", "Date 2"].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left p-1.5 font-bold text-[#008A80] "
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-          // ✅ Render merged list
-          return merged.map((row, i) => (
-            <tr key={i} className="border-b border-[#008A80] Border">
-              <td className="p-1.5 text-[#008A80] font-bold">
-                {row.record_number ?? i + 1}
-              </td>
-              {["topic", "date_1", "date_2"].map((f) => (
-                <td key={f} className="p-1.5">
-                  <input
-                    className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
-                    value={row[f] || ""}
-                    onChange={(e) =>
-                      setCounselling((prev) =>
-                        prev.map((r, idx) =>
-                          idx === i
-                            ? { ...r, [f]: e.target.value }
-                            : r
-                        )
-                      )
-                    }
-                  />
-                </td>
-              ))}
-            </tr>
-          ));
-        })()}
-      </tbody>
-    </table>
-  </div>
-</section>
-
+                <tbody>
+                  {counselling.map((row, i) => (
+                    <tr key={i} className="border-b border-[#008A80] Border">
+                      <td className="p-1.5 text-[#008A80] font-bold">
+                        {row.record_number ?? i + 1}
+                      </td>
+                      {["topic", "date_1", "date_2"].map((f) => (
+                        <td key={f} className="p-1.5">
+                          <input
+                            className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                            value={row[f] || ""}
+                            onChange={(e) =>
+                              setCounselling((prev) =>
+                                prev.map((r, idx) =>
+                                  idx === i
+                                    ? { ...r, [f]: e.target.value }
+                                    : r
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
 
 
         {/* 12️⃣ Future Contraception (checkbox version – matches MCR) */}
@@ -1430,12 +1419,18 @@ return (
               (Provide dual protection)
             </span>
           </span>
-          <button
-            onClick={() => flagSectionIssue("Future Contraception")}
-            className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            <IssueFlagTrigger
+            section="Future Contraception"
+            formId={formId}
+            onSaved={refreshIssues}
           >
-            ⚠️ Flag Issue
-          </button>
+            <button
+              className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </IssueFlagTrigger>
+
         </h4>
 
       {/* === Display unresolved issues for this section === */}
@@ -1584,22 +1579,29 @@ return (
     </div>
 
     {/* Buttons below the main form */}
-<div className="flex justify-center gap-4 mt-6 mb-6">
-  <button
-    onClick={markAsCompleted}
-    disabled={isCompleted}
-    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition disabled:opacity-50"
-  >
-    <span>✅</span> Mark as Completed
-  </button>
+        <div className="flex justify-center gap-4 mt-6 mb-6">
+          <button
+            onClick={markAsCompleted}
+            disabled={isCompleted}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 transition disabled:opacity-50"
+          >
+            <span>✅</span> Mark as Completed
+          </button>
 
-  <button
-    onClick={flagIssue}
-    className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded hover:bg-amber-600 transition"
-  >
-    ⚠️ Flag Issue
-  </button>
-</div>
+          <IssueFlagTrigger
+            section="General Form"
+            formId={formId}
+            onSaved={refreshIssues}
+          >
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded hover:bg-amber-600 transition"
+            >
+              ⚠️ Flag Issue
+            </button>
+          </IssueFlagTrigger>
+        </div>
+
+
 
 {/* Save button */}
 <div className="border-t border-gray-200 p-3 bg-white">

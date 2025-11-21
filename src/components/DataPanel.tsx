@@ -51,7 +51,13 @@ useEffect(() => {
           // lower-case + convert spaces to underscores; KEEP `_test_`
           const clean = k.trim().replace(/\s+/g, "_");
           const lower = clean.toLowerCase();
-          fixed[lower] = v;
+          let cleanedValue = v;
+
+            if (typeof v === "string" && v.includes("T") && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
+              cleanedValue = v.split("T")[0]; // keep only YYYY-MM-DD
+            }
+
+            fixed[lower] = cleanedValue;
 
           // optional: add a SECOND alias without `_test_` for old UI code
           if (lower.includes("_test_")) {
@@ -79,11 +85,48 @@ useEffect(() => {
       console.log("✅ Final merged form object (what UI sees):", mergedForm);
 
       // ✅ Set state for UI rendering
-      setForm(mergedForm);
-      setObstetric(data.obstetric || []);
+      // 🔧 Apply date normalisation
+      const fixedForm = { ...mergedForm };
+
+      for (const key in fixedForm) {
+        if (key.includes("date")) {
+          fixedForm[key] = simpleDateFix(fixedForm[key]);
+        }
+      }
+
+      // ✅ Set state for UI rendering
+      // ✅ Set state for UI rendering
+      setForm(fixedForm);
+
+      // ----------------------------------------------
+      // 🔥 PAD OBSTETRIC ROWS SO USERS CAN ENTER MISSING DATA
+      // ----------------------------------------------
+      const MIN_OBSTETRIC_ROWS = 5;   // adjust if you want more (e.g., 10)
+      let paddedObstetric = [...(data.obstetric || [])];
+
+      while (paddedObstetric.length < MIN_OBSTETRIC_ROWS) {
+        paddedObstetric.push({
+          id: null,
+          form_id: formId,
+          record_number: paddedObstetric.length + 1,
+          year: "",
+          gestation: "",
+          delivery: "",
+          weight: "",
+          sex: "",
+          outcome: "",
+          complications: "",
+          description_of_complications: ""
+        });
+      }
+
+      setObstetric(paddedObstetric);
+
+      // ----------------------------------------------
       setInvestigations(data.investigations || []);
       setCounselling(data.counselling || []);
       setIsCompleted(!!data.form?.is_completed);
+
     } catch (err) {
       console.error("❌ Error loading form:", err);
     } finally {
@@ -150,7 +193,109 @@ useEffect(() => {
   </div>
 );
 
+// GLOBAL pos/neg helper
+const posNegField = (
+  label: string,
+  value: string | undefined,
+  onChange: (v: string) => void
+) => {
+  const options = ["Pos", "Neg", "-"];
+  return (
+    <div className="flex items-center justify-between">
+      <label className="text-xs font-semibold text-gray-700">{label}</label>
+      <div className="flex gap-1">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className={`px-2 py-0.5 text-xs font-semibold rounded ${
+              value === opt
+                ? opt === "Pos"
+                  ? "bg-green-600 text-white"
+                  : "bg-red-600 text-white"
+                : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
 
+const hivResultField = (label, value, onChange) => {
+  const options = ["Pos", "Neg", "Declined", ""];
+
+  return (
+    <div className="flex items-center gap-1">
+      {label && (
+        <label className="text-xs font-semibold text-gray-700">{label}</label>
+      )}
+      {options.map((opt) => (
+        <button
+          key={opt || "unset"}
+          onClick={() => onChange(opt)}
+          className={`px-2 py-0.5 text-xs font-semibold rounded border
+            ${
+              value === opt
+                ? opt === "Pos"
+                  ? "bg-green-600 text-white border-green-600"
+                  : opt === "Neg"
+                  ? "bg-red-600 text-white border-red-600"
+                  : opt === "Declined"
+                  ? "bg-yellow-600 text-white border-yellow-600"
+                  : "bg-gray-500 text-white border-gray-500"
+                : "bg-white text-gray-700 border-gray-300"
+            }`}
+        >
+          {opt || "-"}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+
+const hivStatusField = (
+  label: string,
+  value: string | undefined,
+  onChange: (v: string) => void
+) => {
+  const options = ["Unknown", "Pos", "Neg", "Declined"];
+
+  return (
+    <div className="flex items-center justify-between">
+      <label className="text-xs font-semibold text-gray-700">{label}</label>
+      <div className="flex gap-1">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onChange(opt)}
+            className={`px-2 py-0.5 text-xs font-semibold rounded border
+              ${
+                value === opt
+                  ? opt === "Pos"
+                    ? "bg-green-600 text-white"
+                    : opt === "Neg"
+                    ? "bg-red-600 text-white"
+                    : opt === "Declined"
+                    ? "bg-yellow-600 text-white"
+                    : "bg-blue-600 text-white" // Unknown
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              }
+            `}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
+// yes/no helper
   const yesNoField = (label: string, value: string | undefined, onChange: (v: string) => void) => (
     <div className="flex items-center justify-between">
       <label className="text-xs font-semibold text-gray-700">{label}</label>
@@ -175,6 +320,88 @@ useEffect(() => {
       </div>
     </div>
   );
+
+function simpleDateFix(value) {
+  if (!value || typeof value !== "string") return value;
+
+  // Remove brackets or notes, e.g. (Che)
+  value = value.replace(/\(.*?\)/g, "").trim();
+
+  // If already dd/mm/yyyy, keep it
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
+
+  // yyyy-mm-dd → dd/mm/yyyy
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-");
+    return `${d}/${m}/${y}`;
+  }
+
+  // dd/mm/yy → dd/mm/20yy
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(value)) {
+    const [d, m, y] = value.split("/");
+    return `${d}/${m}/20${y}`;
+  }
+
+  // dd-mm-yy or dd.mm.yy
+  if (/^\d{2}[-.]\d{2}[-.]\d{2}$/.test(value)) {
+    const parts = value.split(/[-.]/);
+    return `${parts[0]}/${parts[1]}/20${parts[2]}`;
+  }
+
+  // ddmmyy → dd/mm/yyyy
+  if (/^\d{6}$/.test(value)) {
+    const d = value.slice(0, 2);
+    const m = value.slice(2, 4);
+    const y = "20" + value.slice(4, 6);
+    return `${d}/${m}/${y}`;
+  }
+
+  return value; // leave unknown formats unchanged
+}
+
+
+
+   // Generic cleaner: Numbers + dot + minus only.
+// Used for BMI, Height, Weight, MUAC, SF Measurement.
+function stripUnits(value) {
+  if (typeof value !== "string") return value ?? "";
+  return value.replace(/[^\d.-]/g, "").trim();
+}
+
+
+
+
+
+const fieldWithUnit = (
+  label: string,
+  value: string | undefined,
+  unit: string,
+  onChange: (v: string) => void
+) => {
+  const cleaned = stripUnits(value || "");
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-700 mb-1">
+        {label}
+      </label>
+
+      <div className="flex items-center gap-2">
+        <input
+          disabled={isCompleted}
+          value={cleaned}
+          onChange={(e) => onChange(stripUnits(e.target.value))}
+          className={`w-full px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] text-gray-900
+          ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+        />
+        <span className="text-xs text-gray-600 whitespace-nowrap">{unit}</span>
+      </div>
+    </div>
+  );
+};
+
+
+ 
 
   /// ---------------------- Save ----------------------
 const handleSave = async () => {
@@ -401,11 +628,18 @@ return (
             ))}
 
           {/* --- Rest of the section fields --- */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {field("Healthcare Worker Name", form.healthcare_worker_name, (v) =>
               updateForm({ healthcare_worker_name: v })
             )}
+
             {field("Clinic", form.clinic, (v) => updateForm({ clinic: v }))}
+
+            {/* ✅ NEW: Clinic Date next to Clinic */}
+            {field("Clinic Date", form.clinic_date, (v) =>
+              updateForm({ clinic_date: v })
+            )}
+
             {field("Folder Number", form.folder_number, (v) =>
               updateForm({ folder_number: v })
             )}
@@ -518,7 +752,16 @@ return (
               "outcome",
               "complications",
             ].map((f) => (
-              <td key={f} className="p-1">
+              <td
+                key={f}
+                className={
+                  f === "year"
+                    ? "p-1 w-20"          // ✅ wider year column
+                    : f === "outcome"
+                    ? "p-1 w-20"          // ✅ narrower outcome column
+                    : "p-1"
+                }
+              >
                 <input
                   value={r[f] || ""}
                   onChange={(e) =>
@@ -529,9 +772,11 @@ return (
                     )
                   }
                   className="w-full border border-[#008A80] Border rounded px-1 py-0.5 text-xs"
+                  maxLength={f === "year" ? 4 : undefined} // optional, keeps it clean
                 />
               </td>
             ))}
+
           </tr>
         ))}
       </tbody>
@@ -704,14 +949,13 @@ return (
       {field("Allergies", form.allergies, (v) =>
         updateForm({ allergies: v })
       )}
-      {field("TB Symptom Screen", form.tb_symptom_screen, (v) =>
-        updateForm({ tb_symptom_screen: v })
+      {posNegField(
+        "TB Symptom Screen",
+        form.tb_symptom_screen,
+        (v) => updateForm({ tb_symptom_screen: v })
       )}
       {yesNoField("Use of Herbal Medicine", form.use_of_herbal, (v) =>
         updateForm({ use_of_herbal: v })
-      )}
-      {yesNoField("Use of OTC Drugs", form.use_of_otc, (v) =>
-        updateForm({ use_of_otc: v })
       )}
       {yesNoField("Tobacco Use", form.tobacco_use, (v) =>
         updateForm({ tobacco_use: v })
@@ -722,6 +966,23 @@ return (
       {yesNoField("Substance Use", form.substance_use, (v) =>
         updateForm({ substance_use: v })
       )}
+      {yesNoField("Use of OTC Drugs", form.use_of_otc, (v) =>
+        updateForm({ use_of_otc: v })
+      )}
+      {/* Type of substance used (client request) */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            Type of substance used
+          </label>
+          <input
+            disabled={isCompleted}
+            value={form.type_of_substance_used || ""}
+            onChange={(e) => updateForm({ type_of_substance_used: e.target.value })}
+            className={`w-full px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg
+              ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+            placeholder=""
+          />
+        </div>
       {field(
         "Psychosocial Risk Factors",
         form.psychosocial_risk_factors,
@@ -749,66 +1010,141 @@ return (
 
           </h4>
             {/* === Display unresolved issues for this section === */}
-{issues
-  .filter((i) => i.section_name === "Examination" && !i.resolved)
-  .map((i) => (
-    <div
-      key={i.id}
-      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
-    >
-      ⚠️ {i.issue_description}
-      {i.created_by && (
-        <div className="text-[10px] text-amber-600 mt-1">
-          Reported by {i.created_by}
-        </div>
-      )}
-      <button
-        onClick={async () => {
-          const token = localStorage.getItem("token");
-          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ resolved: true }),
-          });
-          setIssues((prev) =>
-            prev.map((x) =>
-              x.id === i.id ? { ...x, resolved: true } : x
-            )
-          );
-        }}
-        className="mt-1 text-[10px] text-blue-600 hover:underline"
-      >
-        Mark resolved
-      </button>
-    </div>
-  ))}
+              {issues
+                .filter((i) => i.section_name === "Examination" && !i.resolved)
+                .map((i) => (
+                  <div
+                    key={i.id}
+                    className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+                  >
+                    ⚠️ {i.issue_description}
+                    {i.created_by && (
+                      <div className="text-[10px] text-amber-600 mt-1">
+                        Reported by {i.created_by}
+                      </div>
+                    )}
+                    <button
+                      onClick={async () => {
+                        const token = localStorage.getItem("token");
+                        await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ resolved: true }),
+                        });
+                        setIssues((prev) =>
+                          prev.map((x) =>
+                            x.id === i.id ? { ...x, resolved: true } : x
+                          )
+                        );
+                      }}
+                      className="mt-1 text-[10px] text-blue-600 hover:underline"
+                    >
+                      Mark resolved
+                    </button>
+                  </div>
+                ))}
 
 
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                "bp",
-                "urine",
-                "height",
-                "weight",
-                "muac",
-                "bmi",
-                "thyroid",
-                "breasts",
-                "heart",
-                "lungs",
-                "abdomen",
-                "sf_measurement_at_booking",
-              ].map((f) =>
-                field(
-                  f.replace(/_/g, " ").toUpperCase(),
-                  form[f],
-                  (v) => updateForm({ [f]: v })
-                )
-              )}
-            </div>
+              <div className="grid grid-cols-3 gap-4">
+                {/* === Compact vital fields (unit-based) === */}
+                <div className="flex items-center gap-2">
+                  {/* SYSTOLIC */}
+                  <input
+                    disabled={isCompleted}
+                    value={(form.bp || "").split("/")[0] || ""}
+                    onChange={(e) => {
+                      const systolic = e.target.value.replace(/[^\d]/g, "");
+                      const diastolic = (form.bp || "").split("/")[1] || "";
+                      updateForm({ bp: `${systolic}/${diastolic}` });
+                    }}
+                    className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
+                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                    placeholder="120"
+                  />
+
+                  <span className="font-semibold text-gray-700">/</span>
+
+                  {/* DIASTOLIC */}
+                  <input
+                    disabled={isCompleted}
+                    value={(form.bp || "").split("/")[1] || ""}
+                    onChange={(e) => {
+                      const diastolic = e.target.value.replace(/[^\d]/g, "");
+                      const systolic = (form.bp || "").split("/")[0] || "";
+                      updateForm({ bp: `${systolic}/${diastolic}` });
+                    }}
+                    className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
+                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                    placeholder="70"
+                  />
+
+                  <span className="text-xs text-gray-600">mmHg</span>
+                </div>
+
+
+                <div className="max-w-[120px]">
+                  {field("Urine", form.urine, (v) => updateForm({ urine: v }))}
+                </div>
+
+                <div className="max-w-[140px]">
+                  {fieldWithUnit("Height", form.height, "cm", (v) =>
+                    updateForm({ height: v })
+                  )}
+                </div>
+
+                <div className="max-w-[140px]">
+                  {fieldWithUnit("Weight", form.weight, "kg", (v) =>
+                    updateForm({ weight: v })
+                  )}
+                </div>
+
+                <div className="max-w-[140px]">
+                  {fieldWithUnit("MUAC", form.muac, "cm", (v) =>
+                    updateForm({ muac: v })
+                  )}
+                </div>
+
+                <div className="max-w-[160px]">
+                  {fieldWithUnit("BMI", form.bmi, "kg/m²", (v) =>
+                    updateForm({ bmi: v })
+                  )}
+                </div>
+
+                {/* === Larger clinical text fields === */}
+                <div className="max-w-[240px]">
+                  {field("THYROID", form.thyroid, (v) => updateForm({ thyroid: v }))}
+                </div>
+
+                <div className="max-w-[240px]">
+                  {field("BREASTS", form.breasts, (v) => updateForm({ breasts: v }))}
+                </div>
+
+                <div className="max-w-[240px]">
+                  {field("HEART", form.heart, (v) => updateForm({ heart: v }))}
+                </div>
+
+                <div className="max-w-[240px]">
+                  {field("LUNGS", form.lungs, (v) => updateForm({ lungs: v }))}
+                </div>
+
+                <div className="max-w-[240px]">
+                  {field("ABDOMEN", form.abdomen, (v) => updateForm({ abdomen: v }))}
+                </div>
+
+                <div className="max-w-[160px]">
+                  {fieldWithUnit(
+                  "SF MEASUREMENT AT BOOKING",
+                  stripUnits(form.sf_measurement_at_booking),
+                  "cm",
+                  (v) => updateForm({ sf_measurement_at_booking: stripUnits(v) })
+                )}
+                </div>
+
+              </div>
+
           </section>
 
 
@@ -887,6 +1223,11 @@ return (
                 (v) => updateForm({ pap_smear_done: v })
               )}
               {field(
+                "Pap Smear Date",
+                form.pap_smear_date,
+                (v) => updateForm({ pap_smear_date: v })
+              )}
+              {field(
                 "Pap Smear Result",
                 form.pap_smear_result,
                 (v) => updateForm({ pap_smear_result: v })
@@ -914,151 +1255,401 @@ return (
         </h4>
 
         {/* === Display unresolved issues for this section === */}
-{issues
-  .filter((i) => i.section_name === "Investigations" && !i.resolved)
-  .map((i) => (
-    <div
-      key={i.id}
-      className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
-    >
-      ⚠️ {i.issue_description}
-      {i.created_by && (
-        <div className="text-[10px] text-amber-600 mt-1">
-          Reported by {i.created_by}
-        </div>
-      )}
-      <button
-        onClick={async () => {
-          const token = localStorage.getItem("token");
-          await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ resolved: true }),
-          });
-          setIssues((prev) =>
-            prev.map((x) =>
-              x.id === i.id ? { ...x, resolved: true } : x
-            )
-          );
-        }}
-        className="mt-1 text-[10px] text-blue-600 hover:underline"
-      >
-        Mark resolved
-      </button>
-    </div>
-  ))}
+            {issues
+              .filter((i) => i.section_name === "Investigations" && !i.resolved)
+              .map((i) => (
+                <div
+                  key={i.id}
+                  className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+                >
+                  ⚠️ {i.issue_description}
+                  {i.created_by && (
+                    <div className="text-[10px] text-amber-600 mt-1">
+                      Reported by {i.created_by}
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      const token = localStorage.getItem("token");
+                      await fetch(`${API_BASE}/forms/${formId}/issues/${i.id}`, {
+                        method: "PATCH",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ resolved: true }),
+                      });
+                      setIssues((prev) =>
+                        prev.map((x) =>
+                          x.id === i.id ? { ...x, resolved: true } : x
+                        )
+                      );
+                    }}
+                    className="mt-1 text-[10px] text-blue-600 hover:underline"
+                  >
+                    Mark resolved
+                  </button>
+                </div>
+              ))}
 
 
-  <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-3 space-y-3">
-    {/* Syphilis */}
-    <div className="grid grid-cols-2 gap-3">
-      {field("Syphilis Test Date", form.syphilis_test_date, (v) =>
-        updateForm({ syphilis_test_date: v })
-      )}
-      {field("Syphilis Test Result", form.syphilis_test_result, (v) =>
-        updateForm({ syphilis_test_result: v })
-      )}
-      {field("Repeat Syphilis Test Date", form.repeat_syphilis_test_date, (v) =>
-        updateForm({ repeat_syphilis_test_date: v })
-      )}
-      {field("Repeat Syphilis Test Result", form.repeat_syphilis_test_result, (v) =>
-        updateForm({ repeat_syphilis_test_result: v })
-      )}
-    </div>
+            <div className="text-[#008A80] border border-[#008A80] Border rounded-lg p-3 space-y-3">
 
-    {/* Hb & Treatment */}
-    <div className="grid grid-cols-3 gap-3">
-      {field("Hb", form.hb, (v) => updateForm({ hb: v }))}
-      {field("Treatment 1", form.treatment_1, (v) =>
-        updateForm({ treatment_1: v })
-      )}
-      {field("Treatment 2", form.treatment_2, (v) =>
-        updateForm({ treatment_2: v })
-      )}
-      {field("Treatment 3", form.treatment_3, (v) =>
-        updateForm({ treatment_3: v })
-      )}
-    </div>
+            {/* Syphilis */}
+            <div className="grid grid-cols-2 gap-3">
+              {field("Syphilis Test Date", form.syphilis_test_date, (v) =>
+                updateForm({ syphilis_test_date: v })
+              )}
 
-    {/* Rhesus / Antibodies */}
-    <div className="grid grid-cols-2 gap-3">
-      {field("Rhesus", form.rhesus, (v) => updateForm({ rhesus: v }))}
-      {field("Antibodies", form.antibodies, (v) =>
-        updateForm({ antibodies: v })
-      )}
-    </div>
+              {posNegField(
+                "Syphilis Test Result",
+                form.syphilis_test_result,
+                (v) => updateForm({ syphilis_test_result: v })
+              )}
 
-    {/* Urine MCS */}
-    <div className="grid grid-cols-2 gap-3">
-      {field("Urine MCS Date", form.urine_mcs_date, (v) =>
-        updateForm({ urine_mcs_date: v })
-      )}
-      {field("Urine MCS Result", form.urine_mcs_result, (v) =>
-        updateForm({ urine_mcs_result: v })
-      )}
-    </div>
+              {field("Repeat Syphilis Test Date", form.repeat_syphilis_test_date, (v) =>
+                updateForm({ repeat_syphilis_test_date: v })
+              )}
 
-    {/* Screening for Gestational Diabetes */}
-    {field(
-      "Screening for Gestational Diabetes",
-      form.screening_for_gestational_diabetes,
-      (v) => updateForm({ screening_for_gestational_diabetes: v })
-    )}
+              {posNegField(
+                "Repeat Syphilis Test Result",
+                form.repeat_syphilis_test_result,
+                (v) => updateForm({ repeat_syphilis_test_result: v })
+              )}
+            </div>
 
-    {/* HIV tests */}
-    <div className="grid grid-cols-3 gap-3">
-      {field("HIV Booking Date", form.hiv_booking_date, (v) =>
-        updateForm({ hiv_booking_date: v })
-      )}
-      {field("HIV Booking Result", form.hiv_booking_result, (v) =>
-        updateForm({ hiv_booking_result: v })
-      )}
-      {field("HIV Booking On ART", form.hiv_booking_on_art, (v) =>
-        updateForm({ hiv_booking_on_art: v })
-      )}
-    </div>
+            {/* Treatment 1–3 FIRST (client requirement) */}
+            <div className="grid grid-cols-3 gap-3">
+              {field("Treatment 1", form.treatment_1, (v) =>
+                updateForm({ treatment_1: v })
+              )}
+              {field("Treatment 2", form.treatment_2, (v) =>
+                updateForm({ treatment_2: v })
+              )}
+              {field("Treatment 3", form.treatment_3, (v) =>
+                updateForm({ treatment_3: v })
+              )}
+            </div>
 
-    {[1, 2, 3].map((n) => (
-      <div key={n} className="grid grid-cols-3 gap-3">
-        {field(`HIV Retest ${n} Date`, form[`hiv_retest_${n}_date`], (v) =>
-          updateForm({ [`hiv_retest_${n}_date`]: v })
-        )}
-        {field(`HIV Retest ${n} Result`, form[`hiv_retest_${n}_result`], (v) =>
-          updateForm({ [`hiv_retest_${n}_result`]: v })
-        )}
-        {field(`HIV Retest ${n} On ART`, form[`hiv_retest_${n}_on_art`], (v) =>
-          updateForm({ [`hiv_retest_${n}_on_art`]: v })
-        )}
-      </div>
-    ))}
+            {/* Rhesus / Antibodies */}
+              <div className="grid grid-cols-2 gap-3">
 
-    {/* CD4 / ART */}
-    <div className="grid grid-cols-2 gap-3">
-      {field("CD4", form.cd4, (v) => updateForm({ cd4: v }))}
-      {field("ART Initiated On", form.art_initiated_on, (v) =>
-        updateForm({ art_initiated_on: v })
-      )}
-    </div>
+                {/* Rhesus — pos/neg */}
+                <div className="w-[140px]">
+                  {posNegField(
+                    "Rhesus",
+                    form.rhesus,
+                    (v) => updateForm({ rhesus: v })
+                  )}
+                </div>
 
-    {/* Viral Loads */}
-    {[1, 2, 3].map((n) => (
-      <div key={n} className="grid grid-cols-2 gap-3">
-        {field(`Viral Load ${n} Date`, form[`viral_load_${n}_date`], (v) =>
-          updateForm({ [`viral_load_${n}_date`]: v })
-        )}
-        {field(`Viral Load ${n} Result`, form[`viral_load_${n}_result`], (v) =>
-          updateForm({ [`viral_load_${n}_result`]: v })
-        )}
-      </div>
-    ))}
+                {/* Antibodies — yes/no */}
+                <div className="w-[140px]">
+                  {yesNoField(
+                    "Antibodies",
+                    form.antibodies,
+                    (v) => updateForm({ antibodies: v })
+                  )}
+                </div>
 
-    {/* Other */}
-    {field("Other", form.other, (v) => updateForm({ other: v }))}
-  </div>
-</section>
+              </div>
+
+
+            {/* Hb moved AFTER Rhesus + Antibodies (client request) */}
+            <div className="flex flex-col">
+              <label className="text-xs font-semibold text-gray-700 mb-1">Hb</label>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={form.hb || ""}
+                  onChange={(e) => updateForm({ hb: e.target.value })}
+                  className="w-20 border border-[#008A80] rounded-lg p-2"
+                />
+                <span className="text-xs font-semibold text-gray-700">g/dl</span>
+              </div>
+            </div>
+
+            
+
+           {/* Tet Tox (Tetanus Toxoid) */}
+              <div className="grid grid-cols-3 gap-3">
+                {field("Tet Tox 1st", form.tet_tox_1, (v) =>
+                  updateForm({ tet_tox_1: v })
+                )}
+                {field("Tet Tox 2nd", form.tet_tox_2, (v) =>
+                  updateForm({ tet_tox_2: v })
+                )}
+                {field("Tet Tox 3rd", form.tet_tox_3, (v) =>
+                  updateForm({ tet_tox_3: v })
+                )}
+              </div>
+
+              {/* Tet Tox Notes — full width */}
+              <div className="mt-3">
+                {field("Tetanus Toxoid Notes", form.tetox_notes, (v) =>
+                  updateForm({ tetox_notes: v })
+                )}
+              </div>
+
+              {/* Urine MCS */}
+            <div className="grid grid-cols-2 gap-3">
+              {field("Urine MCS Date", form.urine_mcs_date, (v) =>
+                updateForm({ urine_mcs_date: v })
+              )}
+              {field("Urine MCS Result", form.urine_mcs_result, (v) =>
+                updateForm({ urine_mcs_result: v })
+              )}
+            </div>
+
+
+
+            {/* Screening for Gestational Diabetes */}
+              {/* Screening for Gestational Diabetes */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Screening for Gestational Diabetes
+            </label>
+
+            <div className="flex items-center gap-4">
+
+              {/* First field */}
+              <input
+                value={form.screening_for_gestational_diabetes_1 || ""}
+                onChange={(e) =>
+                  updateForm({ screening_for_gestational_diabetes_1: e.target.value })
+                }
+                disabled={isCompleted}
+                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                  focus:ring-2 focus:ring-[#008A80] text-gray-900
+                  ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+              />
+
+              {/* Second field */}
+              <input
+                value={form.screening_for_gestational_diabetes_2 || ""}
+                onChange={(e) =>
+                  updateForm({ screening_for_gestational_diabetes_2: e.target.value })
+                }
+                disabled={isCompleted}
+                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                  focus:ring-2 focus:ring-[#008A80] text-gray-900
+                  ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+              />
+
+              {/* 28w */}
+              <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                28w
+              </span>
+
+              {/* Third field */}
+              <input
+                value={form.screening_for_gestational_diabetes_3 || ""}
+                onChange={(e) =>
+                  updateForm({ screening_for_gestational_diabetes_3: e.target.value })
+                }
+                disabled={isCompleted}
+                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                  focus:ring-2 focus:ring-[#008A80] text-gray-900
+                  ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+              />
+
+            </div>
+          </div>
+
+
+
+
+            {/* HIV Section — EXACT MCR LAYOUT */}
+                <div className="space-y-4">
+
+                  {/* 1️⃣ HIV Status at Booking */}
+                  <div className="flex items-center gap-4">
+                    <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      HIV Status at Booking
+                    </label>
+
+                    <div className="flex gap-2">
+                      {["Unknown", "Pos", "Neg", "Declined"].map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => updateForm({ hiv_status_at_booking: opt })}
+                          className={`px-2 py-1 text-xs font-semibold rounded border
+                            ${
+                              form.hiv_status_at_booking === opt
+                                ? opt === "Pos"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : opt === "Neg"
+                                  ? "bg-red-600 text-white border-red-600"
+                                  : opt === "Declined"
+                                  ? "bg-yellow-600 text-white border-yellow-600"
+                                  : "bg-blue-600 text-white border-blue-600" // Unknown
+                                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                            }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* HIV Test at Booking — header above date */}
+                      <div className="flex flex-col gap-1">
+
+                        <span className="text-xs font-semibold text-gray-700">
+                          HIV Test at Booking
+                        </span>
+
+                        <div className="flex items-center gap-3 flex-wrap">
+
+                          {/* Date */}
+                          <input
+                            type="text"
+                            value={form.hiv_booking_date || ""}
+                            onChange={(e) => updateForm({ hiv_booking_date: e.target.value })}
+                            disabled={isCompleted}
+                            className={`w-[100px] px-2 py-1 text-xs border border-[#008A80] rounded-lg
+                              ${isCompleted ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                          />
+
+                          {/* Result */}
+                          <span className="text-xs font-semibold text-gray-700">Result</span>
+
+                          <div className="flex gap-1">
+                            {["Pos", "Neg", "Declined", ""].map((opt) => (
+                              <button
+                                key={opt || "unset"}
+                                onClick={() => updateForm({ hiv_booking_result: opt })}
+                                disabled={isCompleted}
+                                className={`px-2 py-0.5 text-xs rounded border font-semibold
+                                  ${
+                                    form.hiv_booking_result === opt
+                                      ? "bg-[#008A80] text-white border-[#008A80]"
+                                      : "bg-white text-gray-700 border-gray-300"
+                                  }
+                                  ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                                `}
+                              >
+                                {opt || "-"}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* On ART */}
+                          <span className="text-xs font-semibold text-gray-700 ml-2">
+                            On ART
+                          </span>
+
+                          {/* YES / NO buttons — USING THE SAME PATTERN AS EVERYWHERE ELSE */}
+                          <div className="flex gap-1">
+                            {yesNo.map((opt) => (
+                              <button
+                                key={opt || "unset"}
+                                onClick={() => updateForm({ hiv_booking_on_art: opt })}
+                                disabled={isCompleted}
+                                className={`px-2 py-0.5 text-xs rounded border font-semibold
+                                  ${
+                                    form.hiv_booking_on_art === opt
+                                      ? "bg-[#008A80] text-white border-[#008A80]"
+                                      : "bg-white text-gray-700 border-gray-300"
+                                  }
+                                  ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                                `}
+                              >
+                                {opt || "-"}
+                              </button>
+                            ))}
+                          </div>
+
+                        </div>
+                      </div>
+
+
+
+
+                  {/* 4️⃣ HIV Retests 1–3 — each on one line */}
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="flex items-center gap-4">
+
+                      {/* Label */}
+                      <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
+                        HIV Retest {n}
+                      </label>
+
+                      {/* Date */}
+                      <input
+                        value={form[`hiv_retest_${n}_date`] || ""}
+                        onChange={(e) =>
+                          updateForm({ [`hiv_retest_${n}_date`]: e.target.value })
+                        }
+                        disabled={isCompleted}
+                        className={`w-[130px] px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg
+                          focus:ring-2 focus:ring-[#008A80] text-gray-900
+                          ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+                        placeholder=""
+                      />
+
+                      {/* Result */}
+                      <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                        Result
+                      </span>
+
+                      <div className="flex gap-1">
+                        {["Pos", "Neg", "Declined", ""].map((opt) => (
+                          <button
+                            key={opt || "unset"}
+                            onClick={() =>
+                              updateForm({ [`hiv_retest_${n}_result`]: opt })
+                            }
+                            className={`px-2 py-0.5 text-xs font-semibold rounded border
+                              ${
+                                form[`hiv_retest_${n}_result`] === opt
+                                  ? opt === "Pos"
+                                    ? "bg-green-600 text-white border-green-600"
+                                    : opt === "Neg"
+                                    ? "bg-red-600 text-white border-red-600"
+                                    : opt === "Declined"
+                                    ? "bg-yellow-600 text-white border-yellow-600"
+                                    : "bg-gray-500 text-white border-gray-500"
+                                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                              }`}
+                          >
+                            {opt || "-"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                </div>
+
+
+
+            {/* CD4 / ART */}
+            <div className="grid grid-cols-2 gap-3">
+              {field("CD4", form.cd4, (v) => updateForm({ cd4: v }))}
+              {field("ART Initiated On", form.art_initiated_on, (v) =>
+                updateForm({ art_initiated_on: v })
+              )}
+            </div>
+
+            {/* Viral Loads */}
+            {[1, 2, 3].map((n) => (
+              <div key={n} className="grid grid-cols-2 gap-3">
+                {field(`Viral Load ${n} Date`, form[`viral_load_${n}_date`], (v) =>
+                  updateForm({ [`viral_load_${n}_date`]: v })
+                )}
+                {field(`Viral Load ${n} Result`, form[`viral_load_${n}_result`], (v) =>
+                  updateForm({ [`viral_load_${n}_result`]: v })
+                )}
+              </div>
+            ))}
+
+            {/* Other */}
+            {field("Other", form.other, (v) => updateForm({ other: v }))}
+            
+          </div>
+     </section>
 
 
         {/* 7️⃣ Gestational Age (corrected full layout) */}
@@ -1152,42 +1743,112 @@ return (
     </div>
 
     {/* Row 5: Singleton / Multiple / Intrauterine */}
-    <div className="grid grid-cols-3 gap-3">
-      {yesNoField("Singleton", form.singleton, (v) =>
-        updateForm({ singleton: v })
-      )}
-      {yesNoField("Multiple Pregnancy", form.multiple_pregnancy, (v) =>
-        updateForm({ multiple_pregnancy: v })
-      )}
-      {yesNoField("Intrauterine Pregnancy", form.intrauterine_pregnancy, (v) =>
-        updateForm({ intrauterine_pregnancy: v })
-      )}
-    </div>
+    {/* Pregnancy Type Checkboxes (per MCR form) */}
+<div className="flex flex-wrap gap-6 items-center text-xs">
 
-    {/* Row 6: SF Measurement + EDD */}
-    <div className="grid grid-cols-3 gap-3">
-      {field("SF Measurement", form.sf_measurement, (v) =>
-        updateForm({ sf_measurement: v })
-      )}
-      {field("EDD Method", form.edd_method, (v) =>
-        updateForm({ edd_method: v })
-      )}
-      {field("EDD", form.edd, (v) => updateForm({ edd: v }))}
-    </div>
+  {/* Singleton */}
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={!!form.singleton}
+      onChange={(e) => updateForm({ singleton: e.target.checked })}
+      disabled={isCompleted}
+      className="accent-[#008A80] h-3.5 w-3.5"
+    />
+    <span className="font-semibold text-gray-700">Singleton</span>
+  </label>
 
-    {/* Row 7: Estimated Date of Delivery (inline) */}
-    <div className="grid grid-cols-2 gap-3">
-      {field(
-        "Estimated Date of Delivery",
-        form.estimated_date_of_delivery,
-        (v) => updateForm({ estimated_date_of_delivery: v })
-      )}
-      {field(
-        "Method Used to Calculate EDD",
-        form.method_used_to_calculate_edd,
-        (v) => updateForm({ method_used_to_calculate_edd: v })
-      )}
-    </div>
+  {/* Multiple Pregnancy */}
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={!!form.multiple_pregnancy}
+      onChange={(e) => updateForm({ multiple_pregnancy: e.target.checked })}
+      disabled={isCompleted}
+      className="accent-[#008A80] h-3.5 w-3.5"
+    />
+    <span className="font-semibold text-gray-700">Multiple Pregnancy</span>
+  </label>
+
+  {/* Intrauterine Pregnancy */}
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={!!form.intrauterine_pregnancy}
+      onChange={(e) => updateForm({ intrauterine_pregnancy: e.target.checked })}
+      disabled={isCompleted}
+      className="accent-[#008A80] h-3.5 w-3.5"
+    />
+    <span className="font-semibold text-gray-700">Intrauterine Pregnancy</span>
+  </label>
+
+</div>
+
+
+    {/* === Estimated Date of Delivery (one row, label left, input right) === */}
+        <div className="flex items-center gap-4 mb-4">
+          <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+            ESTIMATED DATE OF DELIVERY
+          </label>
+
+          <input
+            disabled={isCompleted}
+            value={form.estimated_date_of_delivery || ""}
+            onChange={(e) =>
+              updateForm({ estimated_date_of_delivery: e.target.value })
+            }
+            placeholder=""
+            className={`px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+              ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
+            style={{ width: "150px" }}  // Adjust width if needed
+          />
+        </div>
+
+
+        {/* === Method Used to Calculate EDD (one row) === */}
+          <div className="flex items-center gap-6 mb-4">
+            <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+              Method used to calculate EDD
+            </label>
+
+            {/* Sonar */}
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!form.edd_method_sonar}
+                onChange={(e) => updateForm({ edd_method_sonar: e.target.checked })}
+                disabled={isCompleted}
+                className="accent-[#008A80] h-4 w-4"
+              />
+              <span className="text-xs font-semibold text-gray-700">Sonar</span>
+            </label>
+
+            {/* SF */}
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!form.edd_method_sf}
+                onChange={(e) => updateForm({ edd_method_sf: e.target.checked })}
+                disabled={isCompleted}
+                className="accent-[#008A80] h-4 w-4"
+              />
+              <span className="text-xs font-semibold text-gray-700">SF</span>
+            </label>
+
+            {/* LNMP */}
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!form.edd_method_lnmp}
+                onChange={(e) => updateForm({ edd_method_lnmp: e.target.checked })}
+                disabled={isCompleted}
+                className="accent-[#008A80] h-4 w-4"
+              />
+              <span className="text-xs font-semibold text-gray-700">LNMP</span>
+            </label>
+          </div>
+
+
   </div>
 </section>
 
@@ -1385,23 +2046,41 @@ return (
                       <td className="p-1.5 text-[#008A80] font-bold">
                         {row.record_number ?? i + 1}
                       </td>
-                      {["topic", "date_1", "date_2"].map((f) => (
-                        <td key={f} className="p-1.5">
-                          <input
-                            className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
-                            value={row[f] || ""}
-                            onChange={(e) =>
-                              setCounselling((prev) =>
-                                prev.map((r, idx) =>
-                                  idx === i
-                                    ? { ...r, [f]: e.target.value }
-                                    : r
+                      {/* Topic (LABEL, not input) */}
+                          <td className="p-1.5 text-[#008A80] font-semibold whitespace-nowrap">
+                            {row.topic}
+                          </td>
+
+                          {/* Date 1 */}
+                          <td className="p-1.5">
+                            <input
+                              className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                              value={row.date_1 || ""}
+                              onChange={(e) =>
+                                setCounselling((prev) =>
+                                  prev.map((r, idx) =>
+                                    idx === i ? { ...r, date_1: e.target.value } : r
+                                  )
                                 )
-                              )
-                            }
-                          />
-                        </td>
-                      ))}
+                              }
+                            />
+                          </td>
+
+                          {/* Date 2 */}
+                          <td className="p-1.5">
+                            <input
+                              className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                              value={row.date_2 || ""}
+                              onChange={(e) =>
+                                setCounselling((prev) =>
+                                  prev.map((r, idx) =>
+                                    idx === i ? { ...r, date_2: e.target.value } : r
+                                  )
+                                )
+                              }
+                            />
+                          </td>
+
                     </tr>
                   ))}
                 </tbody>
@@ -1525,57 +2204,45 @@ return (
 
 
         {/* 13️⃣ Booking Visit and Assessment */}
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+            <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide">
+              Booking Visit and Assessment
+            </h4>
+
+            <div className="border border-[#008A80] rounded-lg p-3 text-[#008A80]">
+
+              {/* Done By + Date */}
+              <div className="grid grid-cols-2 gap-3">
+                {field("Done By", form.booking_done_by, (v) =>
+                  updateForm({ booking_done_by: v })
+                )}
+
+                {field("Date", form.booking_date, (v) =>
+                  updateForm({ booking_date: v })
+                )}
+              </div>
+
+            </div>
+          </section>
+
+
+
+
+
+        {/* NOTES */}
         <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
-          <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide">
-            Booking Visit and Assessment
+          <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide">
+            Notes
           </h4>
 
-          <div className="grid grid-cols-2 gap-3 text-[#008A80] border border-[#008A80] Border rounded-lg p-3">
-            {field("Done By", form.booking_done_by, (v) =>
-              updateForm({ booking_done_by: v })
-            )}
-            {field("Date", form.booking_date, (v) =>
-              updateForm({ booking_date: v })
-            )}
-            {field("Educational Material Given", form.education_given, (v) =>
-              updateForm({ education_given: v })
-            )}
-            {field(
-              "All Management Plans Discussed with Patient",
-              form.management_plan,
-              (v) => updateForm({ management_plan: v })
-            )}
-          </div>
-        </section>
-
-
-        {/* 14️⃣ Footer */}
-      <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
-        <h4 className="text-xs font-bold text-[#008A80]  mb-3 uppercase tracking-wide">
-          Footer
-        </h4>
-        <div className="grid grid-cols-2 gap-3">
-          {field(
-            "Healthcare Worker Signature",
-            form.healthcare_worker_signature,
-            (v) => updateForm({ healthcare_worker_signature: v })
-          )}
-          {field("Date of Assessment", form.date_of_assessment, (v) =>
-            updateForm({ date_of_assessment: v })
-          )}
-        </div>
-        <div className="mt-3">
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Notes
-          </label>
           <textarea
-            rows={3}
+            className="w-full border border-[#008A80] rounded-lg p-3 text-sm"
+            rows={4}
             value={form.notes || ""}
             onChange={(e) => updateForm({ notes: e.target.value })}
-            className="w-full px-3 py-2 text-sm border border-[#008A80] Border rounded-lg focus:ring-2 focus:ring-[#008A80] focus:border-[#008A80]"
+            placeholder="Enter any notes here..."
           />
-        </div>
-      </section>
+        </section>
     </div>
 
     {/* Buttons below the main form */}

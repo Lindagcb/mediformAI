@@ -56,19 +56,18 @@ const UploadForm: React.FC<UploadFormProps> = ({ apiBase, onUploadComplete }) =>
       let uploadName: string;
 
       if (file.type.toLowerCase().includes("pdf")) {
-        dataUrl = await pdfFirstPageToPng(file);
-        contentType = "image/png";
-        uploadName = file.name.replace(/\.pdf$/i, "") + "-page1.png";
-      } else {
+        // Send the actual PDF — do NOT convert to PNG here
         dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
-          reader.onerror = () => reject(new Error("Failed to read file"));
-          reader.readAsDataURL(file);
+          reader.onerror = () => reject(new Error("Failed to read PDF file"));
+          reader.readAsDataURL(file);  // Raw PDF to backend
         });
-        contentType = file.type || "image/png";
-        uploadName = file.name;
+
+        contentType = "application/pdf";
+        uploadName = file.name; // keep original name
       }
+
 
       // ✅ get JWT token from localStorage
       const token = localStorage.getItem("token");

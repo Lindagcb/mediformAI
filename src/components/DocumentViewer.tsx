@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { ZoomIn, ZoomOut, RotateCw, Maximize2, Loader2 } from "lucide-react";
+import {
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Maximize2,
+  Loader2,
+} from "lucide-react";
 
 interface DocumentViewerProps {
   apiBase: string;
@@ -9,7 +15,8 @@ interface DocumentViewerProps {
 const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
   const [form, setForm] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
-  const [zoom, setZoom] = useState(100);
+
+  const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
@@ -17,35 +24,17 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
     else setForm(null);
   }, [formId]);
 
-  // ✅ Load form details with token authentication
   const loadForm = async () => {
     if (!formId) return;
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        console.warn("⚠️ No token found — user may not be logged in");
-        setForm(null);
-        return;
-      }
-
       const res = await fetch(`${apiBase}/forms/${formId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`, // ✅ required
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (res.status === 401) {
-        console.warn("⚠️ Unauthorized — clearing token and reloading");
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.reload();
-        return;
-      }
-
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to fetch form");
+      if (!res.ok) throw new Error(data.error);
       setForm(data.form);
     } catch (err) {
       console.error("Error loading form:", err);
@@ -55,39 +44,25 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
     }
   };
 
-  // ✅ Build correct proxy URL using full blob name from file_url
   const getProxyUrl = (form: any): string | null => {
     if (!form) return null;
 
     const fullUrl = form.file_url;
     if (fullUrl && fullUrl.includes("/pdf-uploads/")) {
-      try {
-        const afterContainer = fullUrl.split("/pdf-uploads/")[1];
-        const blobName = decodeURIComponent(afterContainer.split("?")[0]);
-        return `${apiBase}/files/pdf-uploads/${blobName}`;
-      } catch (err) {
-        console.error("⚠️ Could not extract blob name:", err);
-      }
-    }
-
-    if (form.file_name) {
-      return `${apiBase}/files/pdf-uploads/${form.file_name}`;
+      const blob = decodeURIComponent(fullUrl.split("/pdf-uploads/")[1].split("?")[0]);
+      return `${apiBase}/files/pdf-uploads/${blob}`;
     }
 
     return null;
   };
 
-  // ---- Empty / loading states ----
+  const fileUrl = form ? getProxyUrl(form) : null;
+
   if (!formId) {
     return (
       <div className="flex-1 bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <Maximize2 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-500 font-medium">Select a document to view</p>
-          <p className="text-sm text-gray-400 mt-1">
-            Choose a file from the sidebar
-          </p>
-        </div>
+        <Maximize2 className="w-16 h-16 text-gray-300 mb-4" />
+        <p className="text-gray-500">Select a document to view</p>
       </div>
     );
   }
@@ -100,7 +75,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
     );
   }
 
-  if (!form) {
+  if (!fileUrl) {
     return (
       <div className="flex-1 bg-gray-100 flex items-center justify-center">
         <p className="text-gray-500">Document not found</p>
@@ -108,93 +83,66 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
     );
   }
 
-  // ✅ Compute proxy URL (not Azure SAS URL)
-  const fileUrl = getProxyUrl(form);
-
-  // ---- Render viewer ----
   return (
     <div className="flex-1 bg-gray-100 flex flex-col">
+
       {/* Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">Document Viewer</h3>
+      <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
+        <h3 className="text-sm font-semibold">Document Viewer</h3>
+
         <div className="flex items-center space-x-1">
           <button
-            onClick={() => setZoom(Math.max(25, zoom - 25))}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-            title="Zoom Out"
+            onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+            className="p-2 hover:bg-gray-100 rounded"
           >
             <ZoomOut className="w-4 h-4" />
           </button>
-          <span className="text-sm font-medium text-gray-700 min-w-[60px] text-center">
-            {zoom}%
+
+          <span className="text-sm min-w-[50px] text-center">
+            {Math.round(zoom * 100)}%
           </span>
+
           <button
-            onClick={() => setZoom(Math.min(200, zoom + 25))}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-            title="Zoom In"
+            onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
+            className="p-2 hover:bg-gray-100 rounded"
           >
             <ZoomIn className="w-4 h-4" />
           </button>
+
           <div className="w-px h-6 bg-gray-300 mx-2" />
+
           <button
-            onClick={() => setRotation((rotation + 90) % 360)}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-            title="Rotate"
+            onClick={() => setRotation((r) => (r + 90) % 360)}
+            className="p-2 hover:bg-gray-100 rounded"
           >
             <RotateCw className="w-4 h-4" />
           </button>
+
           <button
             onClick={() => {
-              setZoom(100);
+              setZoom(1);
               setRotation(0);
             }}
-            className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-all font-medium"
+            className="px-3 py-2 text-sm hover:bg-gray-100 rounded"
           >
             Reset
           </button>
         </div>
       </div>
 
-      {/* Viewer area */}
+      {/* PDF Viewer */}
       <div className="flex-1 overflow-auto p-6">
         <div
-          className="inline-block min-w-full"
           style={{
-            transform: `scale(${zoom / 100})`,
+            transform: `scale(${zoom}) rotate(${rotation}deg)`,
             transformOrigin: "top left",
           }}
         >
-          {fileUrl ? (
-            form.file_type === "application/pdf" ? (
-              <div
-                style={{
-                  width: `${100 / (zoom / 100)}%`,
-                  transform: `rotate(${rotation}deg)`,
-                  transformOrigin: "center center",
-                }}
-              >
-                <iframe
-                  src={fileUrl}
-                  className="rounded-lg shadow-xl w-full min-h-[800px]"
-                  title="PDF Viewer"
-                />
-              </div>
-            ) : (
-              <img
-                src={fileUrl}
-                alt={form.file_name || "Form image"}
-                className="rounded-lg shadow-xl max-w-full"
-                style={{
-                  transform: `rotate(${rotation}deg)`,
-                  transformOrigin: "center center",
-                }}
-              />
-            )
-          ) : (
-            <div className="text-gray-400 text-center">
-              <p>No preview available</p>
-            </div>
-          )}
+          <iframe
+          src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+          className="w-full h-[1200px] border rounded shadow"
+          title="PDF Viewer"
+        />
         </div>
       </div>
     </div>

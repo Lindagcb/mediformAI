@@ -1,26 +1,33 @@
 // =====================================
 // MediformAI Backend Server
 // =====================================
+
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import fetch from "node-fetch";
 import pkg from "pg";
-import dotenv from "dotenv";
 import { v4 as uuidv4 } from "uuid";
 import { uploadToAzure } from "./utils/azureUpload.js";
-import { convertPdfToImages } from "./utils/convertPdfToImages.js";
 import fs from "fs";
 import { getBlobSasUrl } from "./utils/azureSAS.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { MCR_EXTRACTION_PROMPT } from "./prompts/mcr_extraction_prompt.js";
+import { runOCR } from "./services/ocr/runOCR.js";
 
 
 
-dotenv.config();
 const { Pool } = pkg;
 
 const app = express();
+
+console.log("🔍 Running server file:", import.meta.url);
+console.log("OCR endpoint:", process.env.AZURE_OCR_ENDPOINT);
+console.log("OCR key loaded:", !!process.env.AZURE_OCR_KEY);
 
 // =====================================
 // Middleware
@@ -156,23 +163,6 @@ app.post("/api/logout", (req, res) => {
   res.json({ message: "Logged out" });
 });
 
-// ----------------------------------------------------------
-// Helper: normalise "15/04/25" → "2025-04-15" for PostgreSQL
-// ----------------------------------------------------------
-function normalizeDate(value) {
-  if (!value) return null;
-  const cleaned = String(value).trim().replace(/[.,]/g, "/");
-  const m = cleaned.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (!m) {
-    console.warn("⚠️ Skipping unparsable date:", value);
-    return null;
-  }
-  let [_, d, mth, y] = m;
-  if (y.length === 2) y = `20${y}`;
-  return `${y.padStart(4, "0")}-${mth.padStart(2, "0")}-${d.padStart(2, "0")}`;
-}
-
-
 
 // -------------------------------------
 // Normalise Yes/No fields → always "Yes"/"No"/null for DB text fields
@@ -202,10 +192,9 @@ function normalizeYN(value) {
 // =====================================
 // POST /api/extract-form
 // =====================================
+
 app.post("/api/extract-form", verifyToken, async (req, res) => {
   try {
-
-    // ✅ Normalize all field keys to lowercase so lookups work everywhere
     function normalizeFieldKeys(obj) {
       if (!obj || typeof obj !== "object") return obj;
       const fixed = {};
@@ -214,30 +203,89 @@ app.post("/api/extract-form", verifyToken, async (req, res) => {
       }
       return fixed;
     }
+
     const { filename, fileData, contentType } = req.body;
     const openaiApiKey = process.env.OPENAI_API_KEY;
+
     if (!openaiApiKey) {
       return res.status(500).json({ error: "Missing OpenAI API key" });
     }
 
-    // =====================================
-    // Step 1: Upload file to Azure Blob
-    // =====================================
-    const fileBuffer = Buffer.from(
-      fileData.includes(",") ? fileData.split(",")[1] : fileData,
-      "base64"
-    );
-    const blobFileName = `${uuidv4()}-${filename}`;
-    const fileUrl = await uploadToAzure(blobFileName, fileBuffer, contentType);
-    console.log("✅ Uploaded to Azure:", fileUrl);
+    // ----------------------------------------------------------
+    // 0. Fix filename / content type if PDF
+    // ----------------------------------------------------------
+    const base64Payload = fileData.includes(",")
+      ? fileData.split(",")[1]
+      : fileData;
 
-// =====================================
-// Step 2: Send image to OpenAI for extraction
-// =====================================
-console.log("🧠 Sending image to OpenAI (chat/completions + gpt-4o)");
+    let fixedFilename = filename;
+    let fixedContentType = contentType;
 
-const openaiResponse = await fetch(
-  "https://api.openai.com/v1/chat/completions",  // ✅ endpoint that supports images for gpt-4o
+    if (base64Payload.trim().startsWith("JVBER")) {
+      fixedFilename = filename.replace(/\.[^.]+$/i, ".pdf");
+      fixedContentType = "application/pdf";
+      console.log("🔧 Detected PDF upload. Using filename:", fixedFilename);
+    }
+
+    // =====================================
+    // Step 1: Build PDF buffer, upload to Azure, run OCR
+    // =====================================
+    const pdfBuffer = Buffer.from(base64Payload, "base64");
+
+    const pdfBlobName = `${uuidv4()}-${fixedFilename}`;
+
+    const pdfUrl = await uploadToAzure(pdfBlobName, pdfBuffer, fixedContentType);
+    console.log("📄 PDF uploaded to Azure:", pdfUrl);
+
+    // ✅ ENABLE OCR AGAIN
+    let ocrText = "";
+    try {
+      ocrText = await runOCR(pdfBuffer);
+      console.log("🔍 OCR extracted text:", ocrText.slice(0, 200));
+    } catch (err) {
+      console.warn("⚠️ OCR failed:", err.message);
+    }
+
+    // =====================================
+    // Step 1B: Upload PDF to OpenAI Files API
+    // =====================================
+    console.log("📤 Uploading PDF to OpenAI…");
+
+    const uploadRes = await fetch("https://api.openai.com/v1/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openaiApiKey}`,
+      },
+      body: (() => {
+        const form = new FormData();
+        form.append(
+          "file",
+          new Blob([pdfBuffer], { type: "application/pdf" }),
+          fixedFilename
+        );
+        form.append("purpose", "assistants");
+        return form;
+      })(),
+    });
+
+    const pdfFile = await uploadRes.json();
+
+    if (!uploadRes.ok) {
+      throw new Error(
+        "Failed to upload PDF to OpenAI: " + JSON.stringify(pdfFile)
+      );
+    }
+
+    console.log("📄 OpenAI file uploaded:", pdfFile.id);
+
+    // =====================================
+    // Step 2: Send prompt + PDF file to GPT-4.1
+    // =====================================
+
+    console.log("🧠 Sending PDF to OpenAI GPT-4.1…");
+
+    const openaiResponse = await fetch(
+  "https://api.openai.com/v1/chat/completions",
   {
     method: "POST",
     headers: {
@@ -245,292 +293,25 @@ const openaiResponse = await fetch(
       Authorization: `Bearer ${openaiApiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",  // ✅ multimodal model
+      model: process.env.GPT_MODEL_VERSION, // MUST be gpt-4.1 or better
       messages: [
         {
           role: "user",
           content: [
             {
-  type: "text",
-  text: `
-You are an expert medical form data extractor specializing in Maternity Case Records (MCR1).
+              type: "text",
+              text: `
+${MCR_EXTRACTION_PROMPT}
 
-Follow these additional rules for checkboxes and Yes/No fields:
-- If you see or read the words "No", "Neg", "Negative" anywhere near a checkbox or option, output "No".
-- Only output "Yes" if you clearly read the word "Yes", "Pos", "Positive", or see an obvious tick (✓) or cross (✗) mark.
-- If a box is blank, faint, uncertain, or ambiguous, default to "No".
-
-CRITICAL INSTRUCTIONS:
-1. Look at the ACTUAL form carefully and read EXACTLY what is written (both printed and handwritten text)
-2. Read the form from LEFT to RIGHT, TOP to BOTTOM
-3. Pay special attention to tables - read each row completely from left to right before moving to the next row
-4. For the "Obstetric and Neonatal History" table, read each column: Year, Gestation, Delivery, Weight, Sex, Outcome, Complications
-5. Extract handwritten values EXACTLY as they appear - numbers, measurements, checkmarks, etc.
-6. For checkboxes, if marked put "Yes", if empty put "No"
-
-Analyze this medical form image and extract ALL visible text and form fields.
-
-Return a JSON object matching this EXACT structure (include only sections that are visible on the form):
-
-{
-  "form_name": "Maternity Case Record (MCR1)",
-  "sections": [
-    {
-      "section_name": "Header Identification",
-      "fields": {
-        "healthcare_worker_name": "",
-        "clinic": "",
-        "folder_number": "",
-        "date": "",
-        "patient_name": "",
-        "age": "",
-        "gravida": "",
-        "para": "",
-        "miscarriages": ""
-      }
-    },
-    {
-      "section_name": "Obstetric and Neonatal History",
-      "fields": {
-        "history_record_1_year": "",
-        "history_record_1_gestation": "",
-        "history_record_1_delivery": "",
-        "history_record_1_weight": "",
-        "history_record_1_sex": "",
-        "history_record_1_outcome": "",
-        "history_record_1_complications": "",
-        "description_of_complications": ""
-      }
-    },
-    {
-      "section_name": "Medical and General History",
-      "fields": {
-        "hypertension": "",
-        "diabetes": "",
-        "cardiac": "",
-        "asthma": "",
-        "tuberculosis": "",
-        "epilepsy": "",
-        "mental_health_disorder": "",
-        "hiv": "",
-        "other_condition": "",
-        "if_yes_give_detail": "",
-        "family_history_twins": "",
-        "family_history_diabetes": "",
-        "family_history_tb": "",
-        "family_history_congenital": "",
-        "family_history_details": "",
-        "medication": "",
-        "operations": "",
-        "allergies": "",
-        "tb_symptom_screen": "",
-        "use_of_herbal_medicine": "",
-        "use_of_otc_drugs": "",
-        "alcohol_use": "",
-        "tobacco_use": "",
-        "substance_use": "",
-        "psychosocial_risk_factors": ""
-      }
-    },
-    {
-      "section_name": "Examination",
-      "fields": {
-        "bp": "",
-        "urine": "",
-        "height": "",
-        "weight": "",
-        "muac": "",
-        "bmi": "",
-        "thyroid": "",
-        "breasts": "",
-        "heart": "",
-        "lungs": "",
-        "abdomen": "",
-        "sf_measurement_at_booking": ""
-      }
-    },
-    {
-      "section_name": "Vaginal Examination",
-      "fields": {
-        "permission_obtained": "",
-        "vulva_and_vagina": "",
-        "cervix": "",
-        "uterus": "",
-        "pap_smear_done": "",
-        "pap_smear_result": ""
-      }
-    },
-    {
-      "section_name": "Investigations",
-      "fields": {
-        "syphilis_test_date": "",
-        "syphilis_test_result": "",
-        "repeat_syphilis_test_date": "",
-        "repeat_syphilis_test_result": "",
-        "syphilis_notes": "",
-        "treatment_1": "",
-        "treatment_2": "",
-        "treatment_3": "",
-        "treatment_notes": "",
-        "rhesus": "",
-        "antibodies": "",
-        "hb": "",
-        "hb_notes": "",
-        "tetox_1": "",
-        "tetox_2": "",
-        "tetox_3": "",
-        "tetox_notes": "",
-        "urine_mcs_date": "",
-        "urine_mcs_result": "",
-        "urine_mcs_notes": "",
-        "screening_for_gestational_diabetes": "",
-        "screening_notes": "",
-        "hiv_status_at_booking": "",
-        "hiv_booking_on_art": "",
-        "hiv_booking_date": "",
-        "hiv_booking_result": "",
-        "hiv_booking_declined": "",
-        "hiv_retest_1_date": "",
-        "hiv_retest_1_result": "",
-        "hiv_retest_1_on_art": "",
-        "hiv_retest_1_declined": "",
-        "hiv_retest_2_date": "",
-        "hiv_retest_2_result": "",
-        "hiv_retest_2_on_art": "",
-        "hiv_retest_2_declined": "",
-        "hiv_retest_3_date": "",
-        "hiv_retest_3_result": "",
-        "hiv_retest_3_on_art": "",
-        "hiv_retest_3_declined": "",
-        "cd4": "",
-        "art_initiated_on": "",
-        "hiv_notes": "",
-        "viral_load_1_date": "",
-        "viral_load_1_result": "",
-        "viral_load_2_date": "",
-        "viral_load_2_result": "",
-        "viral_load_3_date": "",
-        "viral_load_3_result": "",
-        "viral_load_notes": "",
-        "other": "",
-        "other_notes": ""
-      }
-    },
-    {
-      "section_name": "Gestational Age",
-      "fields": {
-        "lnmp": "",
-        "certain": "",
-        "sonar_date": "",
-        "bpd": "",
-        "hc": "",
-        "ac": "",
-        "fl": "",
-        "crl": "",
-        "placenta": "",
-        "afi": "",
-        "average_gestation": "",
-        "singleton": "",
-        "multiple_pregnancy": "",
-        "intrauterine_pregnancy": "",
-        "sf_measurement": "",
-        "edd_method": "",
-        "edd": ""
-      }
-    },
-    {
-      "section_name": "Mental Health",
-      "fields": {
-        "screening_performed": "",
-        "score": "",
-        "discussed_in_record": "",
-        "referred_to": ""
-      }
-    },
-    {
-      "section_name": "Birth Companion",
-      "fields": {
-        "discussed": ""
-      }
-    },
-    {
-      "section_name": "Counselling",
-      "fields": {
-        "counselling_1_topic": "",
-        "counselling_1_date_1": "",
-        "counselling_1_date_2": "",
-        "counselling_2_topic": "",
-        "counselling_2_date_1": "",
-        "counselling_2_date_2": ""
-      }
-    },
-    {
-      "section_name": "Future Contraception",
-      "fields": {
-        "implant": "",
-        "iud": "",
-        "tubal_ligation": "",
-        "oral": "",
-        "counselling_done": "",
-        "educational_material_given": "",
-        "assessment_of_risk_done_by": ""
-      }
-    },
-    {
-      "section_name": "Footer",
-      "fields": {
-        "healthcare_worker_signature": "",
-        "date_of_assessment": "",
-        "notes": ""
-      }
-    }
-  ]
-}
-
-EXTRACTION RULES:
-- Use the exact field names shown above
-- Extract EVERY visible value - both typed and handwritten text
-- For checkboxes: marked = "Yes", empty = "No"
-- For empty fields: use empty string ""
-- Preserve dates as DD/MM/YYYY format
-- Preserve measurements with units (e.g., "3.9 kg", "120/80")
-- For the Obstetric History TABLE: read each complete row left to right (Year → Gestation → Delivery → Weight → Sex → Outcome → Complications)
-- Number multiple history records sequentially (History Record 1, History Record 2, etc.)
-- Only include sections visible on this page
-
-TABLE EXTRACTION EXAMPLES:
-
-1. Obstetric History table row:
-If the table shows: "2008 | C/S | 3.9 kg | M | A | Total debrid"
-Extract as:
-"history_record_1_year": "2008"
-"history_record_1_gestation": "C/S"
-"history_record_1_delivery": ""
-"history_record_1_weight": "3.9 kg"
-"history_record_1_sex": "M"
-"history_record_1_outcome": "A"
-"history_record_1_complications": "Total debrid"
-
-2. Counselling table:
-If the table shows rows like:
-"Fetal movements | ✓ | 15/5/24"
-"Nutrition | 20/5/24 | -"
-Extract as:
-"counselling_1_topic": "Fetal movements"
-"counselling_1_date_1": "✓"
-"counselling_1_date_2": "15/5/24"
-"counselling_2_topic": "Nutrition"
-"counselling_2_date_1": "20/5/24"
-"counselling_2_date_2": "-"
-
-
-Return ONLY valid JSON, no additional text or explanations.`,
+----- OCR ASSIST -----
+${ocrText || "No OCR fallback text"}
+----------------------
+              `,
             },
             {
-              type: "image_url",
-              image_url: { url: fileUrl },
-
-              },
+              type: "file",
+              file: { file_id: pdfFile.id },
+            },
           ],
         },
       ],
@@ -540,74 +321,74 @@ Return ONLY valid JSON, no additional text or explanations.`,
 );
 
 
-// =====================================
-// Step 3: Parse JSON safely (robust version)
-// =====================================
-if (!openaiResponse.ok) {
-  const err = await openaiResponse.text();
-  throw new Error(`OpenAI API error: ${err}`);
-}
+    // =====================================
+    // Step 3: Parse JSON from OpenAI response
+    // =====================================
 
-let extractedText = "{}";
-let extracted = {};
+    if (!openaiResponse.ok) {
+      const err = await openaiResponse.text();
+      throw new Error(`OpenAI API error: ${err}`);
+    }
 
-try {
-  const openaiData = await openaiResponse.json();
-  extractedText = openaiData.choices?.[0]?.message?.content || "{}";
+    let extractedText = "{}";
+    let extracted = {};
 
-  console.log("🔍 Raw OpenAI output:\n", extractedText);
+    try {
+      let openaiData;
+      try {
+        openaiData = await openaiResponse.json();
+      } catch {
+        const text = await openaiResponse.text();
+        console.error("OpenAI returned non-JSON:", text);
+        throw new Error("OpenAI returned HTML instead of JSON");
+      }
+      extractedText = openaiData.choices?.[0]?.message?.content || "{}";
 
-  // Try to isolate JSON and parse
-  const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
-  extracted = JSON.parse(jsonMatch ? jsonMatch[0] : extractedText);
+      console.log("🔍 Raw OpenAI output:\n", extractedText);
 
-  // ✅ Normalize all section field keys to lowercase once
-if (Array.isArray(extracted.sections)) {
-  extracted.sections = extracted.sections.map(sec => {
-    const lowerFields = normalizeFieldKeys(sec.fields);
+      const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
+      extracted = JSON.parse(jsonMatch ? jsonMatch[0] : extractedText);
 
-    // 🔹 Create a Proxy so lookups like ["BP"] or ["bp"] both work
-    const caseInsensitive = new Proxy(lowerFields, {
-      get(target, name) {
-        if (typeof name === "string") {
-          const lower = name.toLowerCase();
-          return target[lower];
-        }
-        return undefined;
-      },
-    });
+      if (Array.isArray(extracted.sections)) {
+        extracted.sections = extracted.sections.map((sec) => {
 
-    return { ...sec, fields: caseInsensitive };
-  });
-}
+          // 🔥 FIX 1: Ensure fields is ALWAYS a plain object
+          let rawFields = sec.fields;
+          if (!rawFields || typeof rawFields !== "object" || Array.isArray(rawFields)) {
+            rawFields = {};
+          }
 
+          // 🔥 FIX 2: Normalize keys safely
+          const lowerFields = normalizeFieldKeys(rawFields);
 
+          // 🔥 FIX 3: Wrap fields in a safe proxy
+          const caseInsensitive = new Proxy(lowerFields, {
+            get(target, name) {
+              if (typeof name === "string") {
+                return target[name.toLowerCase()];
+              }
+              return undefined;
+            },
+          });
 
-} catch (err) {
-  console.error("⚠️ JSON parse error:", err);
-  console.log("⚠️ Raw text that failed to parse:\n", extractedText);
+          return { ...sec, fields: caseInsensitive };
+        });
+      }
 
-  // Fallback so uploads still succeed
-  extracted = {
-    form_name: "Extracted Form (Unparsed)",
-    sections: [
-      {
-        section_name: "Raw OCR Output",
-        fields: { raw_text: extractedText || "No readable data returned by model." },
-      },
-    ],
-  };
-}
-
-// ✅ Helper: run DB queries and log any SQL errors
-async function safeQuery(sql, params, label) {
-  try {
-    await pool.query(sql, params);
-  } catch (err) {
-    console.error(`❌ DB error in ${label}:`, err.message);
-  }
-}
-
+    } catch (err) {
+      console.error("⚠️ JSON parse error:", err);
+      extracted = {
+        form_name: "Extracted Form (Unparsed)",
+        sections: [
+          {
+            section_name: "Raw OCR Output",
+            fields: {
+              raw_text: extractedText || "No readable data returned by model.",
+            },
+          },
+        ],
+      };
+    }
 
     // =====================================
     // Step 4: Insert into main forms table
@@ -633,8 +414,8 @@ async function safeQuery(sql, params, label) {
     await pool.query(insertFormQuery, [
       formId,
       filename,
-      fileUrl,
-      contentType,
+      pdfUrl,
+      fixedContentType,
       header["healthcare_worker_name"] || null,
       header["clinic"] || null,
       header["folder_number"] || null,
@@ -645,43 +426,51 @@ async function safeQuery(sql, params, label) {
       header["miscarriages"] || null,
       uploadedAt,
     ]);
-
+    console.log("✅ Inserted form row:", formId);
 
 
 // =====================================
-// Step 4b: Extract Medical & General History fields
+// Step 4b: Medical & General History (FIXED FINAL VERSION)
 // =====================================
 const medical = normalizeFieldKeys(
   extracted.sections?.find((s) => s.section_name === "Medical and General History")?.fields || {}
 );
 
-
-  // --- Normalize Family History keys so they match the DB/UI field names ---
+// Normalize Family History fields (from OCR)
 for (const key of Object.keys(medical)) {
   if (key.toLowerCase().startsWith("family history")) {
-    const shortKey = key
-      .replace(/Family History\s*/i, "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, "_"); // e.g. "Family History Twins" → "twins"
+    const shortKey = key.replace(/Family History\s*/i, "").trim().toLowerCase().replace(/\s+/g, "_");
     medical[`family_history_${shortKey}`] = medical[key];
     delete medical[key];
   }
 }
 
-// ✅ MEDICAL HISTORY
 await pool.query(
   `
   UPDATE forms SET
-    hypertension = $2, diabetes = $3, cardiac = $4, asthma = $5,
-    tuberculosis = $6, epilepsy = $7, mental_health_disorder = $8,
-    hiv = $9, other_condition = $10,
-    family_history_diabetes = $11, family_history_tb = $12,
-    family_history_genetic = $13, family_history_other = $14,
-    medication = $15, operations = $16, allergies = $17,
-    tb_symptom_screen = $18, alcohol_use = $19,
-    tobacco_use = $20, substance_use = $21,
-    psychosocial_risk_factors = $22
+    hypertension = $2,
+    diabetes = $3,
+    cardiac = $4,
+    asthma = $5,
+    tuberculosis = $6,
+    epilepsy = $7,
+    mental_health_disorder = $8,
+    hiv = $9,
+    other_condition = $10,
+    family_history_diabetes = $11,
+    family_history_tb = $12,
+    family_history_twins = $13,
+    family_history_congenital = $14,
+    family_history_details = $15,
+    medication = $16,
+    operations = $17,
+    allergies = $18,
+    tb_symptom_screen = $19,
+    alcohol_use = $20,
+    tobacco_use = $21,
+    substance_use = $22,
+    type_of_substance_used = $23,
+    psychosocial_risk_factors = $24
   WHERE id = $1
   `,
   [
@@ -692,20 +481,22 @@ await pool.query(
     normalizeYN(medical["asthma"]),
     normalizeYN(medical["tuberculosis"]),
     normalizeYN(medical["epilepsy"]),
-    normalizeYN(medical["mental_health_disorder"]), // underscore not space
+    normalizeYN(medical["mental_health_disorder"]),
     normalizeYN(medical["hiv"]),
-    medical["other_condition"] || null,             // fixed spelling
+    medical["other_condition"] || null,
     normalizeYN(medical["family_history_diabetes"]),
     normalizeYN(medical["family_history_tb"]),
-    normalizeYN(medical["family_history_genetic"]),
-    medical["family_history_other"] || null,
+    normalizeYN(medical["family_history_twins"]),
+    normalizeYN(medical["family_history_congenital"]),
+    medical["family_history_details"] || null,
     medical["medication"] || null,
     medical["operations"] || null,
     medical["allergies"] || null,
-    medical["tb_symptom_screen"] || null,
+    normalizeYN(medical["tb_symptom_screen"]),
     normalizeYN(medical["alcohol_use"]),
     normalizeYN(medical["tobacco_use"]),
     normalizeYN(medical["substance_use"]),
+    medical["type_of_substance_used"] || null,
     medical["psychosocial_risk_factors"] || null,
   ]
 );
@@ -771,7 +562,7 @@ await pool.query(
 );
 
 // =====================================
-// Step 4e: Gestational Age
+// Step 4e: Gestational Age (UPDATED TO MATCH UI + DB)
 // =====================================
 const gestation = normalizeFieldKeys(
   extracted.sections?.find((s) => s.section_name === "Gestational Age")?.fields || {}
@@ -780,11 +571,24 @@ const gestation = normalizeFieldKeys(
 await pool.query(
   `
   UPDATE forms SET
-    lnmp = $2, certain = $3, sonar_date = $4,
-    bpd = $5, hc = $6, ac = $7, fl = $8, crl = $9,
-    placenta = $10, afi = $11, average_gestation = $12,
-    singleton = $13, multiple_pregnancy = $14, intrauterine_pregnancy = $15,
-    sf_measurement = $16, edd_method = $17, edd = $18
+    lnmp = $2,
+    certain = $3,
+    sonar_date = $4,
+    bpd = $5,
+    hc = $6,
+    ac = $7,
+    fl = $8,
+    crl = $9,
+    placenta = $10,
+    afi = $11,
+    average_gestation = $12,
+    singleton = $13,
+    multiple_pregnancy = $14,
+    intrauterine_pregnancy = $15,
+    estimated_date_of_delivery = $16,
+    edd_method_sonar = $17,
+    edd_method_sf = $18,
+    edd_method_lnmp = $19
   WHERE id = $1
   `,
   [
@@ -800,14 +604,16 @@ await pool.query(
     gestation["placenta"] || null,
     gestation["afi"] || null,
     gestation["average_gestation"] || null,
-    normalizeYN(gestation["singleton"]),
-    normalizeYN(gestation["multiple_pregnancy"]),
-    normalizeYN(gestation["intrauterine_pregnancy"]),
-    gestation["sf_measurement"] || null,
-    gestation["edd_method"] || null,
-    gestation["edd"] || null,
+    gestation["singleton"] === true,
+    gestation["multiple_pregnancy"] === true,
+    gestation["intrauterine_pregnancy"] === true,
+    gestation["estimated_date_of_delivery"] || null,
+    gestation["edd_method_sonar"] === true,
+    gestation["edd_method_sf"] === true,
+    gestation["edd_method_lnmp"] === true,
   ]
 );
+
 
 
 // =====================================
@@ -852,7 +658,7 @@ await pool.query(
 
 
 // =====================================
-// Step 4h: Future Contraception
+// Step 4h: Future Contraception (FINAL CORRECT VERSION)
 // =====================================
 const contraception = normalizeFieldKeys(
   extracted.sections?.find((s) => s.section_name === "Future Contraception")?.fields || {}
@@ -861,23 +667,26 @@ const contraception = normalizeFieldKeys(
 await pool.query(
   `
   UPDATE forms SET
-    dual_protection = $2, implant = $3, inject = $4, iud = $5,
-    tubal_ligation = $6, oral = $7,
-    counselling_done = $8, educational_material_given = $9,
-    assessment_of_risk_done_by = $10
+    implant = $2,
+    inject = $3,
+    iud = $4,
+    tubal_ligation = $5,
+    oral = $6,
+    management_plans_discussed = $7,
+    educational_material_given = $8,
+    tubal_ligation_counselling = $9
   WHERE id = $1
   `,
   [
     formId,
-    normalizeYN(contraception["dual_protection"]),
     normalizeYN(contraception["implant"]),
     normalizeYN(contraception["inject"]),
     normalizeYN(contraception["iud"]),
     normalizeYN(contraception["tubal_ligation"]),
     normalizeYN(contraception["oral"]),
-    normalizeYN(contraception["counselling_done"]),
+    normalizeYN(contraception["management_plans_discussed"]),
     normalizeYN(contraception["educational_material_given"]),
-    contraception["assessment_of_risk_done_by"] || null,
+    normalizeYN(contraception["tubal_ligation_counselling"])
   ]
 );
 
@@ -892,42 +701,36 @@ const booking = normalizeFieldKeys(
 await pool.query(
   `
   UPDATE forms SET
-    booking_done_by = $2, booking_date = $3,
-    education_given = $4, management_plan = $5
+    booking_done_by = $2,
+    booking_date = $3
   WHERE id = $1
   `,
   [
     formId,
     booking["booking_done_by"] || null,
-    booking["booking_date"] || null,
-    normalizeYN(booking["education_given"]),
-    booking["management_plan"] || null,
+    booking["booking_date"] || null
   ]
 );
 
+
 // =====================================
-// Step 4j: Footer
+// Step 4j: Notes
 // =====================================
-const footer = normalizeFieldKeys(
-  extracted.sections?.find((s) => s.section_name === "Footer")?.fields || {}
+const notesSection = normalizeFieldKeys(
+  extracted.sections?.find((s) => s.section_name === "Notes")?.fields || {}
 );
 
 await pool.query(
   `
   UPDATE forms SET
-    healthcare_worker_signature = $2,
-    date_of_assessment = $3,
-    notes = $4
+    notes = $2
   WHERE id = $1
   `,
   [
     formId,
-    footer["healthcare_worker_signature"] || null,
-    footer["date_of_assessment"] || null,
-    footer["notes"] || null,
+    notesSection["notes"] || null
   ]
 );
-
 
     // =====================================
 // Step 5: Handle repeating sections
@@ -938,29 +741,25 @@ const obstetricSection = extracted.sections?.find(
   (s) => s.section_name === "Obstetric and Neonatal History"
 );
 
-const obstetric = normalizeFieldKeys(obstetricSection?.fields || {});
+// GPT returns: records: [{ year, gestation, delivery, weight, sex, outcome, complications }]
+const obstetricRecords =
+  obstetricSection?.records?.map((rec, index) => ({
+    id: uuidv4(),
+    form_id: formId,
+    record_number: index + 1,
+    year: rec.year || null,
+    gestation: rec.gestation || null,
+    delivery: rec.delivery || null,
+    weight: rec.weight || null,
+    sex: rec.sex || null,
+    outcome: rec.outcome || null,
+    complications: rec.complications || null,
+    description_of_complications:
+      obstetricSection.description_of_complications || null,
+  })) || [];
 
-// ✅ Build records dynamically
-const obstetricRecords = Object.entries(obstetric).reduce((acc, [key, val]) => {
-  // Match keys like "history_record_1_year", "history_record_1_weight", etc.
-  const match = key.match(/^history_record_(\d+)_(\w+)$/i);
-  if (match) {
-    const [_, num, field] = match;
-    if (!acc[num]) acc[num] = { record_number: parseInt(num), form_id: formId };
-    acc[num][field] = val;
-  }
-  return acc;
-}, {});
-
-// ✅ Extract the free-text field for “description_of_complications”
-const descriptionOfComplications =
-  obstetric["description_of_complications"] ||
-  obstetric["description_of_complication"] ||
-  obstetric["complications_description"] ||
-  null;
-
-// ✅ Insert each obstetric/neonatal record
-for (const record of Object.values(obstetricRecords)) {
+// INSERT each row
+for (const record of obstetricRecords) {
   await pool.query(
     `
     INSERT INTO obstetric_neonatal_history
@@ -969,22 +768,22 @@ for (const record of Object.values(obstetricRecords)) {
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     `,
     [
-      uuidv4(),
-      formId,
+      record.id,
+      record.form_id,
       record.record_number,
-      record.year || null,
-      record.gestation || null,
-      record.delivery || null,
-      record.weight || null,
-      record.sex || null,
-      record.outcome || null,
-      record.complications || null,
-      descriptionOfComplications || null,
+      record.year,
+      record.gestation,
+      record.delivery,
+      record.weight,
+      record.sex,
+      record.outcome,
+      record.complications,
+      record.description_of_complications,
     ]
   );
 }
 
-    // ---- Investigations ----
+
 // ---- Investigations ----
 const investigations =
   extracted.sections?.find((s) => s.section_name === "Investigations")?.fields || {};
@@ -994,132 +793,144 @@ await pool.query(
      id, form_id,
      syphilis_test_date, syphilis_test_result,
      repeat_syphilis_test_date, repeat_syphilis_test_result,
-     syphilis_notes,
-     treatment_1, treatment_2, treatment_3, treatment_notes,
-     rhesus, antibodies,
-     hb, hb_notes,
-     tetox_1, tetox_2, tetox_3, tetox_notes,
-     urine_mcs_date, urine_mcs_result, urine_mcs_notes,
-     screening_for_gestational_diabetes, screening_notes,
-     hiv_status_at_booking, hiv_booking_on_art,
-     hiv_booking_date, hiv_booking_result, hiv_booking_declined,
+     hiv_booking_date, hiv_booking_result, hiv_booking_on_art,
      hiv_retest_1_date, hiv_retest_1_result, hiv_retest_1_on_art, hiv_retest_1_declined,
      hiv_retest_2_date, hiv_retest_2_result, hiv_retest_2_on_art, hiv_retest_2_declined,
      hiv_retest_3_date, hiv_retest_3_result, hiv_retest_3_on_art, hiv_retest_3_declined,
-     cd4, art_initiated_on, hiv_notes,
+     cd4,
      viral_load_1_date, viral_load_1_result,
      viral_load_2_date, viral_load_2_result,
-     viral_load_3_date, viral_load_3_result, viral_load_notes,
-     other, other_notes
+     viral_load_3_date, viral_load_3_result,
+     other,
+     hb,
+     treatment_1, treatment_2, treatment_3,
+     rhesus, antibodies,
+     urine_mcs_date, urine_mcs_result,
+
+     -- ⭐ Correct GDM fields
+     screening_for_gestational_diabetes_1,
+     screening_for_gestational_diabetes_2,
+     screening_gdm_28w,
+
+     art_initiated_on,
+     tetox_1, tetox_2, tetox_3,
+     tetox_notes,
+     hiv_status_at_booking, hiv_booking_declined,
+     hiv_notes,
+     tet_tox_1, tet_tox_2, tet_tox_3
    )
    VALUES (
      $1,$2,
      $3,$4,
      $5,$6,
-     $7,
-     $8,$9,$10,$11,
-     $12,$13,
-     $14,$15,
-     $16,$17,$18,$19,
-     $20,$21,$22,
+     $7,$8,$9,
+     $10,$11,$12,$13,
+     $14,$15,$16,$17,
+     $18,$19,$20,$21,
+     $22,
      $23,$24,
      $25,$26,
-     $27,$28,$29,
-     $30,$31,$32,$33,
-     $34,$35,$36,$37,
-     $38,$39,$40,$41,
+     $27,$28,
+     $29,
+     $30,
+     $31,$32,$33,
+     $34,$35,
+     $36,$37,
+
+     -- ⭐ Correct GDM placeholders
+     $38,$39,$40,
+
+     $41,
      $42,$43,$44,
-     $45,$46,
-     $47,$48,
-     $49,$50,$51,
-     $52,$53
+     $45,
+     $46,$47,
+     $48,
+     $49,$50,$51
    )`,
   [
-    uuidv4(),
-    formId,
+    uuidv4(), formId,
 
-    // Syphilis
-    normalizeDate(investigations["syphilis_test_date"]),
-    investigations["syphilis_test_result"],
-    normalizeDate(investigations["repeat_syphilis_test_date"]),
-    investigations["repeat_syphilis_test_result"],
-    investigations["syphilis_notes"],
+    investigations.syphilis_test_date || null,
+    investigations.syphilis_test_result || null,
 
-    // Treatment
-    investigations["treatment_1"],
-    investigations["treatment_2"],
-    investigations["treatment_3"],
-    investigations["treatment_notes"],
+    investigations.repeat_syphilis_test_date || null,
+    investigations.repeat_syphilis_test_result || null,
 
-    // Blood group & antibodies
-    investigations["rhesus"],
-    investigations["antibodies"],
+    investigations.hiv_booking_date || null,
+    investigations.hiv_booking_result || null,
+    normalizeYN(investigations.hiv_booking_on_art),
 
-    // Hb
-    investigations["hb"],
-    investigations["hb_notes"],
+    investigations.hiv_retest_1_date || null,
+    investigations.hiv_retest_1_result || null,
+    normalizeYN(investigations.hiv_retest_1_on_art),
+    normalizeYN(investigations.hiv_retest_1_declined),
 
-    // Tetox
-    investigations["tetox_1"],
-    investigations["tetox_2"],
-    investigations["tetox_3"],
-    investigations["tetox_notes"],
+    investigations.hiv_retest_2_date || null,
+    investigations.hiv_retest_2_result || null,
+    normalizeYN(investigations.hiv_retest_2_on_art),
+    normalizeYN(investigations.hiv_retest_2_declined),
 
-    // Urine MCS
-    normalizeDate(investigations["urine_mcs_date"]),
-    investigations["urine_mcs_result"],
-    investigations["urine_mcs_notes"],
+    investigations.hiv_retest_3_date || null,
+    investigations.hiv_retest_3_result || null,
+    normalizeYN(investigations.hiv_retest_3_on_art),
+    normalizeYN(investigations.hiv_retest_3_declined),
 
-    // Gestational Diabetes
-    investigations["screening_for_gestational_diabetes"],
-    investigations["screening_notes"],
+    investigations.cd4 || null,
 
-    // HIV Booking
-    investigations["hiv_status_at_booking"],
-    normalizeYN(investigations["hiv_booking_on_art"]),
-    normalizeDate(investigations["hiv_booking_date"]),
-    investigations["hiv_booking_result"],
-    normalizeYN(investigations["hiv_booking_declined"]),
+    investigations.viral_load_1_date || null,
+    investigations.viral_load_1_result || null,
+    investigations.viral_load_2_date || null,
+    investigations.viral_load_2_result || null,
+    investigations.viral_load_3_date || null,
+    investigations.viral_load_3_result || null,
 
-    // HIV Re-tests 1–3
-    normalizeDate(investigations["hiv_retest_1_date"]),
-    investigations["hiv_retest_1_result"],
-    normalizeYN(investigations["hiv_retest_1_on_art"]),
-    normalizeYN(investigations["hiv_retest_1_declined"]),
-    normalizeDate(investigations["hiv_retest_2_date"]),
-    investigations["hiv_retest_2_result"],
-    normalizeYN(investigations["hiv_retest_2_on_art"]),
-    normalizeYN(investigations["hiv_retest_2_declined"]),
-    normalizeDate(investigations["hiv_retest_3_date"]),
-    investigations["hiv_retest_3_result"],
-    normalizeYN(investigations["hiv_retest_3_on_art"]),
-    normalizeYN(investigations["hiv_retest_3_declined"]),
+    investigations.other || null,
 
-    // CD4 & ART
-    investigations["cd4"],
-    normalizeDate(investigations["art_initiated_on"]),
-    investigations["hiv_notes"],
+    investigations.hb || null,
 
-    // Viral Loads
-    normalizeDate(investigations["viral_load_1_date"]),
-    investigations["viral_load_1_result"],
-    normalizeDate(investigations["viral_load_2_date"]),
-    investigations["viral_load_2_result"],
-    normalizeDate(investigations["viral_load_3_date"]),
-    investigations["viral_load_3_result"],
-    investigations["viral_load_notes"],
+    investigations.treatment_1 || null,
+    investigations.treatment_2 || null,
+    investigations.treatment_3 || null,
 
-    // Other
-    investigations["other"],
-    investigations["other_notes"]
+    investigations.rhesus || null,
+    investigations.antibodies || null,
+
+    investigations.urine_mcs_date || null,
+    investigations.urine_mcs_result || null,
+
+    // ⭐ Correct GDM fields
+    investigations.screening_for_gestational_diabetes_1 || null,
+    investigations.screening_for_gestational_diabetes_2 || null,
+    investigations.screening_gdm_28w || null,
+
+    investigations.art_initiated_on || null,
+
+    investigations.tetox_1 || null,
+    investigations.tetox_2 || null,
+    investigations.tetox_3 || null,
+    investigations.tetox_notes || null,
+
+    investigations.hiv_status_at_booking || null,
+    normalizeYN(investigations.hiv_booking_declined),
+
+    investigations.hiv_notes || null,
+
+    investigations.tet_tox_1 || null,
+    investigations.tet_tox_2 || null,
+    investigations.tet_tox_3 || null
   ]
 );
 
-    
+
 
     // ---- Counselling ----
+const normalize = (s) =>
+  s?.toString().trim().replace(/\s+/g, " ").toLowerCase();
+
 const counselling =
-  extracted.sections?.find((s) => s.section_name === "Counselling")?.fields || {};
+  extracted.sections?.find(
+    (s) => normalize(s.section_name) === "counselling"
+  )?.fields || {};
 
 const counsellingRecords = Object.entries(counselling).reduce((acc, [key, val]) => {
   // ✅ Match both "Counselling 1 Date 1" and "counselling_1_date_1"
@@ -1139,7 +950,7 @@ const counsellingRecords = Object.entries(counselling).reduce((acc, [key, val]) 
 // ✅ Debug: confirm parsing worked
 console.log("🧾 Parsed counselling records:", counsellingRecords);
 
-// ✅ Insert each counselling record
+// ✅ Insert each counselling record (NO date parsing)
 for (const record of Object.values(counsellingRecords)) {
   await pool.query(
     `INSERT INTO counselling
@@ -1150,11 +961,12 @@ for (const record of Object.values(counsellingRecords)) {
       formId,
       record.record_number,
       record.topic || null,
-      normalizeDate(record.date_1),
-      normalizeDate(record.date_2),
+      record.date_1 || null,   // ← RAW TEXT (correct)
+      record.date_2 || null,   // ← RAW TEXT (correct)
     ]
   );
 }
+
 
 
     // =====================================
@@ -1163,7 +975,7 @@ for (const record of Object.values(counsellingRecords)) {
     res.json({
       success: true,
       form_id: formId,
-      file_url: fileUrl,
+      file_url: pdfUrl,
       message: "✅ Form extracted and saved successfully"
     });
   } catch (err) {
@@ -1222,31 +1034,34 @@ app.get("/api/forms/:id", verifyToken, async (req, res) => {
 
     // ---- Investigations (full schema) ----
     const investigationsQ = await pool.query(
-      `SELECT id, form_id,
-              syphilis_test_date, syphilis_test_result,
-              repeat_syphilis_test_date, repeat_syphilis_test_result,
-              syphilis_notes,
-              treatment_1, treatment_2, treatment_3, treatment_notes,
-              rhesus, antibodies,
-              hb, hb_notes,
-              tetox_1, tetox_2, tetox_3, tetox_notes,
-              urine_mcs_date, urine_mcs_result, urine_mcs_notes,
-              screening_for_gestational_diabetes, screening_notes,
-              hiv_status_at_booking, hiv_booking_on_art,
-              hiv_booking_date, hiv_booking_result, hiv_booking_declined,
-              hiv_retest_1_date, hiv_retest_1_result, hiv_retest_1_on_art, hiv_retest_1_declined,
-              hiv_retest_2_date, hiv_retest_2_result, hiv_retest_2_on_art, hiv_retest_2_declined,
-              hiv_retest_3_date, hiv_retest_3_result, hiv_retest_3_on_art, hiv_retest_3_declined,
-              cd4, art_initiated_on, hiv_notes,
-              viral_load_1_date, viral_load_1_result,
-              viral_load_2_date, viral_load_2_result,
-              viral_load_3_date, viral_load_3_result, viral_load_notes,
-              other, other_notes
-       FROM investigations
-       WHERE form_id = $1
-       ORDER BY id`,
-      [id]
-    );
+  `SELECT
+      id, form_id,
+      syphilis_test_date, syphilis_test_result,
+      repeat_syphilis_test_date, repeat_syphilis_test_result,
+      hiv_booking_date, hiv_booking_result, hiv_booking_on_art,
+      hiv_retest_1_date, hiv_retest_1_result, hiv_retest_1_on_art, hiv_retest_1_declined,
+      hiv_retest_2_date, hiv_retest_2_result, hiv_retest_2_on_art, hiv_retest_2_declined,
+      hiv_retest_3_date, hiv_retest_3_result, hiv_retest_3_on_art, hiv_retest_3_declined,
+      cd4,
+      viral_load_1_date, viral_load_1_result,
+      viral_load_2_date, viral_load_2_result,
+      viral_load_3_date, viral_load_3_result,
+      hb,
+      treatment_1, treatment_2, treatment_3,
+      rhesus, antibodies,
+      urine_mcs_date, urine_mcs_result,
+      screening_for_gestational_diabetes, screening_gdm_28w,
+      art_initiated_on,
+      tetox_1, tetox_2, tetox_3, tetox_notes,
+      hiv_status_at_booking, hiv_booking_declined,
+      hiv_notes,
+      other
+   FROM investigations
+   WHERE form_id = $1
+   ORDER BY id`,
+  [id]
+);
+
 
     // ---- Counselling ----
     const counsellingQ = await pool.query(
@@ -1265,14 +1080,21 @@ app.get("/api/forms/:id", verifyToken, async (req, res) => {
       investigations: investigationsQ.rows,
       counselling: counsellingQ.rows,
       sections: [
-        { section_name: "Investigations", fields: investigationsQ.rows[0] || {} },
-        { section_name: "Medical and General History", fields: form || {} },
-        { section_name: "Examination", fields: form || {} },
-        { section_name: "Vaginal Examination", fields: form || {} },
-        { section_name: "Gestational Age", fields: form || {} },
-        { section_name: "Mental Health", fields: form || {} },
-        { section_name: "Future Contraception", fields: form || {} }
-      ]
+      { section_name: "Header Identification", fields: form },
+      { section_name: "Medical and General History", fields: form },
+      { section_name: "Examination", fields: form },
+      { section_name: "Vaginal Examination", fields: form },
+      { section_name: "Gestational Age", fields: form },
+      { section_name: "Mental Health", fields: form },
+      { section_name: "Birth Companion", fields: form },
+      { section_name: "Future Contraception", fields: form },
+      { section_name: "Counselling", fields: counsellingQ.rows.reduce((acc, row) => {
+          acc[`counselling_${row.record_number}_date_1`] = row.date_1;
+          acc[`counselling_${row.record_number}_date_2`] = row.date_2;
+          return acc;
+        }, {}) },
+      { section_name: "Investigations", fields: investigationsQ.rows[0] || {} }
+    ]
     });
   } catch (err) {
     console.error("GET /api/forms/:id error:", err);
@@ -1299,23 +1121,55 @@ app.put("/api/forms/:id", verifyToken, async (req, res) => {
     // ---- Update forms table ----
     if (form && Object.keys(form).length > 0) {
       const allowedCols = [
-        "healthcare_worker_name","clinic","folder_number","form_date",
+        // HEADER
+        "healthcare_worker_name","clinic","clinic_date","folder_number","form_date",
         "patient_name","age","gravida","para","miscarriages",
+
+        // MEDICAL HISTORY
         "hypertension","diabetes","cardiac","asthma","tuberculosis","epilepsy",
-        "mental_health_disorder","hiv","other_condition",
-        "family_history_diabetes","family_history_tb","family_history_genetic","family_history_other",
+        "mental_health_disorder","hiv","other_condition","other_condition_detail",
+        "family_history_diabetes","family_history_tb","family_history_twins",
+        "family_history_congenital","family_history_details",
         "medication","operations","allergies","tb_symptom_screen",
-        "alcohol_use","tobacco_use","substance_use","psychosocial_risk_factors",
-        "bp","urine","height","weight","muac","bmi","thyroid","breasts","heart","lungs","abdomen","sf_measurement_at_booking",
-        "permission_obtained","vulva_and_vagina","cervix","uterus","pap_smear_done","pap_smear_result",
-        "lnmp","certain","sonar_date","bpd","hc","ac","fl","crl","placenta","afi","average_gestation",
-        "singleton","multiple_pregnancy","intrauterine_pregnancy","sf_measurement","edd_method","edd",
-        "screening_performed","mental_health_score","discussed_in_record","referred_to",
+        "use_of_herbal","use_of_otc","tobacco_use","alcohol_use",
+        "substance_use","type_of_substance_used","psychosocial_risk_factors",
+
+        // EXAMINATION
+        "bp","urine","height","weight","muac","bmi",
+        "thyroid","breasts","heart","lungs","abdomen","sf_measurement_at_booking",
+
+        // VAGINAL EXAM
+        "permission_obtained","vulva_and_vagina","cervix","uterus",
+        "pap_smear_done","pap_smear_date","pap_smear_result",
+
+        // GESTATIONAL AGE (FINAL)
+        "lnmp","certain","sonar_date",
+        "bpd","hc","ac","fl","crl","placenta","afi","average_gestation",
+        "singleton","multiple_pregnancy","intrauterine_pregnancy",
+        "estimated_date_of_delivery",
+        "edd_method_sonar","edd_method_sf","edd_method_lnmp",
+
+        // MENTAL HEALTH
+        "screening_performed","mental_health_score",
+        "discussed_in_record","referred_to",
+
+        // BIRTH COMPANION
         "discussed",
-        "implant","iud","tubal_ligation","oral",
-        "counselling_done","educational_material_given","assessment_of_risk_done_by",
-        "healthcare_worker_signature","date_of_assessment","notes"
+
+        // FUTURE CONTRACEPTION (final, correct)
+        "implant","inject","iud","tubal_ligation","oral",
+        "management_plans_discussed",
+        "educational_material_given",
+        "tubal_ligation_counselling",
+
+        // BOOKING VISIT (final, correct)
+        "booking_done_by","booking_date",
+
+        // NOTES
+        "notes"
       ];
+
+
 
       const sets = [];
       const values = [];
@@ -1360,151 +1214,172 @@ app.put("/api/forms/:id", verifyToken, async (req, res) => {
       }
     }
 
-    // ---- Replace investigations records ----
+      // ---- Replace investigations records ----
 if (Array.isArray(investigations)) {
   await client.query(`DELETE FROM investigations WHERE form_id = $1`, [id]);
+
   for (const row of investigations) {
     await client.query(
-      `INSERT INTO investigations (
-         id, form_id,
-         syphilis_test_date, syphilis_test_result,
-         repeat_syphilis_test_date, repeat_syphilis_test_result,
-         syphilis_notes,
-         treatment_1, treatment_2, treatment_3, treatment_notes,
-         rhesus, antibodies,
-         hb, hb_notes,
-         tetox_1, tetox_2, tetox_3, tetox_notes,
-         urine_mcs_date, urine_mcs_result, urine_mcs_notes,
-         screening_for_gestational_diabetes, screening_notes,
-         hiv_status_at_booking, hiv_booking_on_art,
-         hiv_booking_date, hiv_booking_result, hiv_booking_declined,
-         hiv_retest_1_date, hiv_retest_1_result, hiv_retest_1_on_art, hiv_retest_1_declined,
-         hiv_retest_2_date, hiv_retest_2_result, hiv_retest_2_on_art, hiv_retest_2_declined,
-         hiv_retest_3_date, hiv_retest_3_result, hiv_retest_3_on_art, hiv_retest_3_declined,
-         cd4, art_initiated_on, hiv_notes,
-         viral_load_1_date, viral_load_1_result,
-         viral_load_2_date, viral_load_2_result,
-         viral_load_3_date, viral_load_3_result, viral_load_notes,
-         other, other_notes
-       )
-       VALUES (
-         $1,$2,
-         $3,$4,
-         $5,$6,
-         $7,
-         $8,$9,$10,$11,
-         $12,$13,
-         $14,$15,
-         $16,$17,$18,$19,
-         $20,$21,$22,
-         $23,$24,
-         $25,$26,
-         $27,$28,$29,
-         $30,$31,$32,$33,
-         $34,$35,$36,$37,
-         $38,$39,$40,$41,
-         $42,$43,$44,
-         $45,$46,
-         $47,$48,
-         $49,$50,$51,
-         $52,$53
-       )`,
+      `
+      INSERT INTO investigations (
+        id, form_id,
+        syphilis_test_date, syphilis_test_result,
+        repeat_syphilis_test_date, repeat_syphilis_test_result,
+        hiv_booking_date, hiv_booking_result, hiv_booking_on_art,
+        hiv_retest_1_date, hiv_retest_1_result, hiv_retest_1_on_art, hiv_retest_1_declined,
+        hiv_retest_2_date, hiv_retest_2_result, hiv_retest_2_on_art, hiv_retest_2_declined,
+        hiv_retest_3_date, hiv_retest_3_result, hiv_retest_3_on_art, hiv_retest_3_declined,
+        cd4,
+        viral_load_1_date, viral_load_1_result,
+        viral_load_2_date, viral_load_2_result,
+        viral_load_3_date, viral_load_3_result,
+        other,
+        hb,
+        treatment_1, treatment_2, treatment_3,
+        rhesus, antibodies,
+        urine_mcs_date, urine_mcs_result,
+
+        -- ⭐ Correct GDM fields
+        screening_for_gestational_diabetes_1,
+        screening_for_gestational_diabetes_2,
+        screening_gdm_28w,
+
+        art_initiated_on,
+        tetox_1, tetox_2, tetox_3, tetox_notes,
+        hiv_status_at_booking, hiv_booking_declined,
+        hiv_notes,
+        tet_tox_1, tet_tox_2, tet_tox_3
+      )
+      VALUES (
+        $1,$2,
+        $3,$4,
+        $5,$6,
+        $7,$8,$9,
+        $10,$11,$12,$13,
+        $14,$15,$16,$17,
+        $18,$19,$20,$21,
+        $22,
+        $23,$24,
+        $25,$26,
+        $27,$28,
+        $29,
+        $30,
+        $31,$32,$33,
+        $34,$35,
+        $36,$37,
+
+        -- ⭐ GDM fields in the correct position
+        $38,$39,$40,
+
+        $41,
+        $42,$43,$44,$45,
+        $46,$47,
+        $48,
+        $49,$50,$51
+      )
+      `,
       [
         row.id || uuidv4(), id,
 
-        normalizeDate(row.syphilis_test_date),
-        row.syphilis_test_result ?? null,
-        normalizeDate(row.repeat_syphilis_test_date),
-        row.repeat_syphilis_test_result ?? null,
-        row.syphilis_notes ?? null,
+        row.syphilis_test_date || null,
+        row.syphilis_test_result || null,
 
-        row.treatment_1 ?? null,
-        row.treatment_2 ?? null,
-        row.treatment_3 ?? null,
-        row.treatment_notes ?? null,
+        row.repeat_syphilis_test_date || null,
+        row.repeat_syphilis_test_result || null,
 
-        row.rhesus ?? null,
-        row.antibodies ?? null,
-
-        row.hb ?? null,
-        row.hb_notes ?? null,
-
-        row.tetox_1 ?? null,
-        row.tetox_2 ?? null,
-        row.tetox_3 ?? null,
-        row.tetox_notes ?? null,
-
-        normalizeDate(row.urine_mcs_date),
-        row.urine_mcs_result ?? null,
-        row.urine_mcs_notes ?? null,
-
-        row.screening_for_gestational_diabetes ?? null,
-        row.screening_notes ?? null,
-
-        row.hiv_status_at_booking ?? null,
+        row.hiv_booking_date || null,
+        row.hiv_booking_result || null,
         normalizeYN(row.hiv_booking_on_art),
-        normalizeDate(row.hiv_booking_date),
-        row.hiv_booking_result ?? null,
-        normalizeYN(row.hiv_booking_declined),
 
-        normalizeDate(row.hiv_retest_1_date),
-        row.hiv_retest_1_result ?? null,
+        row.hiv_retest_1_date || null,
+        row.hiv_retest_1_result || null,
         normalizeYN(row.hiv_retest_1_on_art),
         normalizeYN(row.hiv_retest_1_declined),
 
-        normalizeDate(row.hiv_retest_2_date),
-        row.hiv_retest_2_result ?? null,
+        row.hiv_retest_2_date || null,
+        row.hiv_retest_2_result || null,
         normalizeYN(row.hiv_retest_2_on_art),
         normalizeYN(row.hiv_retest_2_declined),
 
-        normalizeDate(row.hiv_retest_3_date),
-        row.hiv_retest_3_result ?? null,
+        row.hiv_retest_3_date || null,
+        row.hiv_retest_3_result || null,
         normalizeYN(row.hiv_retest_3_on_art),
         normalizeYN(row.hiv_retest_3_declined),
 
-        row.cd4 ?? null,
-        normalizeDate(row.art_initiated_on),
-        row.hiv_notes ?? null,
+        row.cd4 || null,
 
-        normalizeDate(row.viral_load_1_date),
-        row.viral_load_1_result ?? null,
-        normalizeDate(row.viral_load_2_date),
-        row.viral_load_2_result ?? null,
-        normalizeDate(row.viral_load_3_date),
-        row.viral_load_3_result ?? null,
-        row.viral_load_notes ?? null,
+        row.viral_load_1_date || null,
+        row.viral_load_1_result || null,
+        row.viral_load_2_date || null,
+        row.viral_load_2_result || null,
+        row.viral_load_3_date || null,
+        row.viral_load_3_result || null,
 
-        row.other ?? null,
-        row.other_notes ?? null
+        row.other || null,
+        row.hb || null,
+
+        row.treatment_1 || null,
+        row.treatment_2 || null,
+        row.treatment_3 || null,
+
+        row.rhesus || null,
+        row.antibodies || null,
+
+        row.urine_mcs_date || null,
+        row.urine_mcs_result || null,
+
+        // ⭐ Correct GDM fields
+        row.screening_for_gestational_diabetes_1 || null,
+        row.screening_for_gestational_diabetes_2 || null,
+        row.screening_gdm_28w || null,
+
+        row.art_initiated_on || null,
+
+        row.tetox_1 || null,
+        row.tetox_2 || null,
+        row.tetox_3 || null,
+        row.tetox_notes || null,
+
+        row.hiv_status_at_booking || null,
+        normalizeYN(row.hiv_booking_declined),
+
+        row.hiv_notes || null,
+
+        row.tet_tox_1 || null,
+        row.tet_tox_2 || null,
+        row.tet_tox_3 || null
       ]
     );
   }
 }
 
+      // ---- Replace counselling records ----
+      if (Array.isArray(counselling)) {
+        await client.query(`DELETE FROM counselling WHERE form_id = $1`, [id]);
 
-    // ---- Replace counselling records ----
-    if (Array.isArray(counselling)) {
-      await client.query(`DELETE FROM counselling WHERE form_id = $1`, [id]);
-      for (const row of counselling) {
-        await client.query(
-          `INSERT INTO counselling
-           (id, form_id, record_number, topic, date_1, date_2)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [
-            row.id || uuidv4(), id,
-            row.record_number ?? null,
-            row.topic ?? null,
-            row.date_1 ?? null,
-            row.date_2 ?? null
-          ]
-        );
+        for (const row of counselling) {
+          await client.query(
+            `INSERT INTO counselling
+            (id, form_id, record_number, topic, date_1, date_2)
+            VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+              row.id || uuidv4(), id,
+              row.record_number ?? null,
+              row.topic ?? null,
+              row.date_1 ?? null,
+              row.date_2 ?? null
+            ]
+          );
+        }
       }
-    }
 
-    await client.query("COMMIT");
-    res.json({ success: true });
+      await client.query("COMMIT");
+      res.json({ success: true });
+
   } catch (err) {
-    try { await client.query("ROLLBACK"); } catch {}
+    try { 
+      await client.query("ROLLBACK"); 
+    } catch {}
     console.error("PUT /api/forms/:id error:", err);
     res.status(500).json({ error: err.message });
   } finally {
@@ -1548,29 +1423,36 @@ import { BlobServiceClient } from "@azure/storage-blob";
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const blobService = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
 
-// ✅ Example: GET /api/files/pdf-uploads/MCR1-page1.png
+// ✅ Example: GET /api/files/pdf-uploads/.pdf
 app.get("/api/files/:container/:filename", async (req, res) => {
   try {
     const { container, filename } = req.params;
+
     const containerClient = blobService.getContainerClient(container);
     const blobClient = containerClient.getBlobClient(filename);
 
-    // Try to get blob metadata to set content type
-    const props = await blobClient.getProperties();
-    res.setHeader("Content-Type", props.contentType || "application/octet-stream");
-
-    // Stream the file directly to browser
-    const downloadResponse = await blobClient.download();
-    downloadResponse.readableStreamBody.pipe(res);
-  } catch (err) {
-    console.error("❌ Error serving blob:", err.message);
-    if (err.statusCode === 404) {
-      res.status(404).send("File not found in Azure Blob Storage.");
-    } else {
-      res.status(500).send("Error fetching file from Azure.");
+    const exists = await blobClient.exists();
+    if (!exists) {
+      console.error("❌ Blob not found:", filename);
+      return res.status(404).json({ error: "File not found" });
     }
+
+    const properties = await blobClient.getProperties();
+
+    res.setHeader("Content-Type", properties.contentType || "application/pdf");
+    res.setHeader("Content-Length", properties.contentLength);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+
+    const download = await blobClient.download(0);
+    download.readableStreamBody.pipe(res);
+
+  } catch (err) {
+    console.error("❌ Blob fetch error:", err);
+    res.status(500).json({ error: "Failed to fetch blob" });
   }
 });
+
 
 // =====================================
 // FORM ISSUE TRACKING ROUTES

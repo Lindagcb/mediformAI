@@ -404,14 +404,15 @@ ${ocrText || "No OCR fallback text"}
     const uploadedAt = new Date().toISOString();
 
 
-    const insertFormQuery = `
+   const insertFormQuery = `
       INSERT INTO forms (
         id, file_name, file_url, file_type,
         healthcare_worker_name, clinic, folder_number,
-        patient_name, age, gravida, para, miscarriages,
+        patient_name, mom_connected, age, date_of_birth, gravida, para, miscarriages,
         upload_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
     `;
+
 
     await pool.query(insertFormQuery, [
       formId,
@@ -422,12 +423,15 @@ ${ocrText || "No OCR fallback text"}
       header["clinic"] || null,
       header["folder_number"] || null,
       header["patient_name"] || null,
+      header["mom_connected"] || null,
       header["age"] || null,
+      header["date_of_birth"] || null,   // ⭐ NEW
       header["gravida"] || null,
       header["para"] || null,
       header["miscarriages"] || null,
       uploadedAt,
     ]);
+
     console.log("✅ Inserted form row:", formId);
 
 
@@ -1139,7 +1143,7 @@ app.put("/api/forms/:id", verifyToken, async (req, res) => {
       const allowedCols = [
         // HEADER
         "healthcare_worker_name","clinic","clinic_date","folder_number","form_date",
-        "patient_name","age","gravida","para","miscarriages",
+        "patient_name", "mom_connected", "age","date_of_birth","gravida","para","miscarriages",
 
         // MEDICAL HISTORY
         "hypertension","diabetes","cardiac","asthma","tuberculosis","epilepsy",

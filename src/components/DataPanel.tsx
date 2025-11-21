@@ -601,14 +601,15 @@ return (
       </p>
     </div>
   )}
-      {/* 1️⃣ Header Identification */}
-        <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+      {/* ============================================================= */}
+          {/*  A. FACILITY INFORMATION  */}
+          {/* ============================================================= */}
+          <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
           <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
-            <span>General Information</span>
+            <span>Facility Information</span>
 
-            {/* NEW: Wrap your existing button with IssueFlagTrigger */}
             <IssueFlagTrigger
-              section="General Information"
+              section="Facility Information"
               formId={formId}
               onSaved={refreshIssues}
             >
@@ -622,7 +623,7 @@ return (
 
           {/* === Display unresolved issues for this section === */}
           {issues
-            .filter((i) => i.section_name === "General Information" && !i.resolved)
+            .filter((i) => i.section_name === "Facility Information" && !i.resolved)
             .map((i) => (
               <div
                 key={i.id}
@@ -636,7 +637,6 @@ return (
                   </div>
                 )}
 
-                {/* Resolve button stays EXACTLY as before */}
                 <button
                   onClick={() => resolveIssue(i.id)}
                   className="mt-1 text-[10px] text-blue-600 hover:underline"
@@ -646,7 +646,6 @@ return (
               </div>
             ))}
 
-          {/* --- Rest of the section fields --- */}
           <div className="grid grid-cols-3 gap-3">
             {field("Healthcare Worker Name", form.healthcare_worker_name, (v) =>
               updateForm({ healthcare_worker_name: v })
@@ -654,25 +653,127 @@ return (
 
             {field("Clinic", form.clinic, (v) => updateForm({ clinic: v }))}
 
-            {/* ✅ NEW: Clinic Date next to Clinic */}
             {field("Clinic Date", form.clinic_date, (v) =>
               updateForm({ clinic_date: v })
             )}
-
-            {field("Folder Number", form.folder_number, (v) =>
-              updateForm({ folder_number: v })
-            )}
-            {field("Patient Name", form.patient_name, (v) =>
-              updateForm({ patient_name: v })
-            )}
-            {field("Age", form.age, (v) => updateForm({ age: v }))}
-            {field("Gravida", form.gravida, (v) => updateForm({ gravida: v }))}
-            {field("Para", form.para, (v) => updateForm({ para: v }))}
-            {field("Miscarriages", form.miscarriages, (v) =>
-              updateForm({ miscarriages: v })
-            )}
           </div>
         </section>
+
+
+          {/* ============================================================= */}
+            {/*  B. GENERAL PATIENT INFORMATION */}
+            {/* ============================================================= */}
+            <section className="odd:bg-gray-50 even:bg-white p-4 rounded-lg">
+              <h4 className="text-xs font-bold text-[#008A80] mb-3 uppercase tracking-wide flex justify-between items-center">
+                <span>General Information</span>
+
+                <IssueFlagTrigger
+                  section="General Information"
+                  formId={formId}
+                  onSaved={refreshIssues}
+                >
+                  <button
+                    className="text-[10px] text-amber-600 hover:text-amber-700 font-normal flex items-center gap-1"
+                  >
+                    ⚠️ Flag Issue
+                  </button>
+                </IssueFlagTrigger>
+              </h4>
+
+              {/* === Display unresolved issues === */}
+              {issues
+                .filter((i) => i.section_name === "General Information" && !i.resolved)
+                .map((i) => (
+                  <div
+                    key={i.id}
+                    className="bg-amber-50 border-l-4 border-amber-500 p-2 mb-2 rounded text-[13px] text-amber-800"
+                  >
+                    ⚠️ {i.issue_description}
+                    {i.created_by && (
+                      <div className="text-[10px] text-amber-600 mt-1">
+                        Reported by {i.created_by}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => resolveIssue(i.id)}
+                      className="mt-1 text-[10px] text-blue-600 hover:underline"
+                    >
+                      Mark resolved
+                    </button>
+                  </div>
+                ))}
+
+             {/* ================= ROW 1 ================= */}
+              <div className="grid grid-cols-3 gap-3">
+                {/* Patient Name — wide */}
+                <div className="col-span-2">
+                  {field("Patient Name", form.patient_name, (v) =>
+                    updateForm({ patient_name: v })
+                  )}
+                </div>
+
+                {/* MomConnected toggle */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    MomConnected
+                  </label>
+
+                  <div className="flex gap-1">
+                    {yesNo.map((opt) => (
+                      <button
+                        key={opt || "unset"}
+                        onClick={() => updateForm({ mom_connected: opt })}
+                        className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                          form.mom_connected === opt
+                            ? opt === "Yes"
+                              ? "bg-green-600 text-white"
+                              : opt === "No"
+                              ? "bg-red-600 text-white"
+                              : "bg-gray-500 text-white"
+                            : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+                        }`}
+                      >
+                        {opt || "-"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+                {/* Row 2: Folder Number + DOB + Age */}
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {field("Folder Number", form.folder_number, (v) =>
+                    updateForm({ folder_number: v })
+                  )}
+
+                  {field("Date of Birth", form.date_of_birth, (v) =>
+                    updateForm({ date_of_birth: v })
+                  )}
+
+                  {field("Age", form.age, (v) =>
+                    updateForm({ age: v })
+                  )}
+                </div>
+
+                {/* Row 3: Gravida + Para + Miscarriages */}
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  {field("Gravida", form.gravida, (v) =>
+                    updateForm({ gravida: v })
+                  )}
+
+                  {field("Para", form.para, (v) =>
+                    updateForm({ para: v })
+                  )}
+
+                  {field("Miscarriages", form.miscarriages, (v) =>
+                    updateForm({ miscarriages: v })
+                  )}
+                </div>
+
+            </section>
+
+
 
 
         {/* 2️⃣ Obstetric & Neonatal History */}
@@ -1069,15 +1170,15 @@ return (
 
               <div className="grid grid-cols-3 gap-4">
                 {/* === Compact vital fields (unit-based) === */}
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+
                   {/* SYSTOLIC */}
                   <input
                     disabled={isCompleted}
-                    value={(form.bp || "").split("/")[0] || ""}
+                    value={form.bp || ""}   // systolic comes from form.bp
                     onChange={(e) => {
                       const systolic = e.target.value.replace(/[^\d]/g, "");
-                      const diastolic = (form.bp || "").split("/")[1] || "";
-                      updateForm({ bp: `${systolic}/${diastolic}` });
+                      updateForm({ bp: systolic });
                     }}
                     className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
                       ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
@@ -1089,11 +1190,10 @@ return (
                   {/* DIASTOLIC */}
                   <input
                     disabled={isCompleted}
-                    value={(form.bp || "").split("/")[1] || ""}
+                    value={form.bp_dia || ""}  // diastolic comes from NEW FIELD
                     onChange={(e) => {
                       const diastolic = e.target.value.replace(/[^\d]/g, "");
-                      const systolic = (form.bp || "").split("/")[0] || "";
-                      updateForm({ bp: `${systolic}/${diastolic}` });
+                      updateForm({ bp_dia: diastolic });
                     }}
                     className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
                       ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}

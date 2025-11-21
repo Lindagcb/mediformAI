@@ -89,7 +89,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
 
       {/* Toolbar */}
       <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
-        <h3 className="text-sm font-semibold">Document Viewer</h3>
+        <h3 className="text-sm font-semibold">Original Form</h3>
 
         <div className="flex items-center space-x-1">
           <button

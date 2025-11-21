@@ -10,6 +10,22 @@ GENERAL RULES:
 - For measurements, return only the numeric value.
 - Tables: extract EVERY visible row.
 
+Extract blood pressure as two separate fields:
+
+- "bp": systolic value only (no symbols, no slash, no semicolon)
+- "bp_dia": diastolic value only
+
+If the form shows “120/70”, output:
+"bp": "120"
+"bp_dia": "70"
+
+Do NOT output "120/70".
+Do NOT output "120 ;".
+Do NOT output "120:".
+Do NOT include units.
+
+Numbers only.
+
 SPECIAL BOOLEAN CHECKBOX RULES:
 Return true/false (boolean, not strings) for:
 singleton, multiple_pregnancy, intrauterine_pregnancy,
@@ -94,6 +110,7 @@ RETURN JSON EXACTLY IN THIS STRUCTURE:
       "section_name": "Examination",
       "fields": {
         "bp": "",
+        "bp_dia": "",
         "urine": "",
         "height": "",
         "weight": "",

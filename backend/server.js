@@ -410,7 +410,7 @@ ${ocrText || "No OCR fallback text"}
         healthcare_worker_name, clinic, folder_number,
         patient_name, mom_connected, age, date_of_birth, gravida, para, miscarriages,
         upload_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     `;
 
 

@@ -6,7 +6,6 @@ import {
   Maximize2,
   Loader2,
 } from "lucide-react";
-import PdfCanvasViewer from "./PdfCanvasViewer";
 
 interface DocumentViewerProps {
   apiBase: string;
@@ -133,9 +132,19 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
 
       {/* PDF Viewer */}
       <div className="flex-1 overflow-auto p-6">
-        <PdfCanvasViewer url={fileUrl} zoom={zoom} rotation={rotation} />
+        <div
+          style={{
+            transform: `scale(${zoom}) rotate(${rotation}deg)`,
+            transformOrigin: "top left",
+          }}
+        >
+          <iframe
+          src={`${fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+          className="w-full h-[1200px] border rounded shadow"
+          title="PDF Viewer"
+        />
+        </div>
       </div>
-
     </div>
   );
 };

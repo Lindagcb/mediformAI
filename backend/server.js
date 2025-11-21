@@ -43,7 +43,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
-      // allow requests with no origin (mobile apps, curl, etc.)
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
@@ -52,8 +51,11 @@ app.use(
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Authorization"],
   })
 );
+
 
 // handle preflight manually (some browsers require this)
 app.options("*", cors());
@@ -512,14 +514,27 @@ const exam = normalizeFieldKeys(
 await pool.query(
   `
   UPDATE forms SET
-    bp = $2, urine = $3, height = $4, weight = $5, muac = $6, bmi = $7,
-    thyroid = $8, breasts = $9, heart = $10, lungs = $11, abdomen = $12,
-    sf_measurement_at_booking = $13
+    bp = $2,                 -- systolic (existing)
+    bp_dia = $3,             -- diastolic (NEW)
+    urine = $4,
+    height = $5,
+    weight = $6,
+    muac = $7,
+    bmi = $8,
+    thyroid = $9,
+    breasts = $10,
+    heart = $11,
+    lungs = $12,
+    abdomen = $13,
+    sf_measurement_at_booking = $14
   WHERE id = $1
   `,
   [
     formId,
+
+    // NEW ordering — systolic first, diastolic second
     exam["bp"] || null,
+    exam["bp_dia"] || null,
     exam["urine"] || null,
     exam["height"] || null,
     exam["weight"] || null,
@@ -533,6 +548,7 @@ await pool.query(
     exam["sf_measurement_at_booking"] || null,
   ]
 );
+
 
 
 // =====================================
@@ -1135,7 +1151,7 @@ app.put("/api/forms/:id", verifyToken, async (req, res) => {
         "substance_use","type_of_substance_used","psychosocial_risk_factors",
 
         // EXAMINATION
-        "bp","urine","height","weight","muac","bmi",
+        "bp","bp_dia","urine","height","weight","muac","bmi",
         "thyroid","breasts","heart","lungs","abdomen","sf_measurement_at_booking",
 
         // VAGINAL EXAM

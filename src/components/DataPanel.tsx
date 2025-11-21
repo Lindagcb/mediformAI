@@ -456,12 +456,30 @@ const handleSave = async () => {
 
 const handleDelete = async () => {
   if (!confirm("Are you sure you want to delete this form? This cannot be undone.")) return;
+
   setDeleting(true);
+
   try {
-    const res = await fetch(`${API_BASE}/forms/${formId}`, { method: "DELETE" });
-    if (!res.ok) throw new Error("Failed to delete form");
+    const token = localStorage.getItem("token");
+
+    const res = await fetch(`${API_BASE}/forms/${formId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Delete failed:", res.status, errText);
+      throw new Error("Failed to delete form");
+    }
+
     alert("Form deleted successfully");
-    window.location.reload(); // refreshes list after deletion
+    window.location.reload();
+
   } catch (err) {
     console.error("Delete failed:", err);
     alert("Failed to delete form");
@@ -469,6 +487,7 @@ const handleDelete = async () => {
     setDeleting(false);
   }
 };
+
 
 const markAsCompleted = async () => {
   try {

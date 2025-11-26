@@ -1636,200 +1636,200 @@ return (
 
 
             {/* HIV Section — Compact + Smaller Font + Dash + Dec + ONLY 2 RETESTS */}
-<div className="space-y-3">
+              <div className="space-y-3">
 
-  {/* 1️⃣ HIV Status at Booking */}
-  <div className="flex items-center gap-2 min-w-0">
-    <label className="block text-[11px] font-semibold text-gray-700 whitespace-nowrap">
-      HIV Status at Booking
-    </label>
+                {/* 1️⃣ HIV Status at Booking */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <label className="block text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                    HIV Status at Booking
+                  </label>
 
-    <div className="flex gap-1 flex-wrap min-w-0">
-      {["Unknown", "Pos", "Neg", "-"].map((opt) => {
-        const isDash = opt === "-";
-        const active =
-          (isDash && !form.hiv_status_at_booking) ||
-          form.hiv_status_at_booking === opt;
+                  <div className="flex gap-1 flex-wrap min-w-0">
+                    {["Unknown", "Pos", "Neg", "-"].map((opt) => {
+                      const isDash = opt === "-";
+                      const active =
+                        (isDash && !form.hiv_status_at_booking) ||
+                        form.hiv_status_at_booking === opt;
 
-        return (
-          <button
-            key={opt}
-            onClick={() =>
-              updateForm({
-                hiv_status_at_booking: isDash ? "" : opt,
-              })
-            }
-            disabled={isCompleted}
-            className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
-              ${
-                active && !isDash
-                  ? opt === "Pos"
-                    ? "bg-green-600 text-white border-green-600"
-                    : opt === "Neg"
-                    ? "bg-red-600 text-white border-red-600"
-                    : "bg-blue-600 text-white border-blue-600" // Unknown
-                  : "bg-white text-gray-700 border-gray-300"
-              }
-              ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-            `}
-          >
-            {opt}
-          </button>
-        );
-      })}
-    </div>
-  </div>
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() =>
+                            updateForm({
+                              hiv_status_at_booking: isDash ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
+                          className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
+                            ${
+                              active && !isDash
+                                ? opt === "Pos"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : opt === "Neg"
+                                  ? "bg-red-600 text-white border-red-600"
+                                  : "bg-blue-600 text-white border-blue-600" // Unknown
+                                : "bg-white text-gray-700 border-gray-300"
+                            }
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-  {/* 2️⃣ On ART */}
-  <div className="flex items-center gap-2 min-w-0">
-    <label className="block text-[11px] font-semibold text-gray-700 whitespace-nowrap">
-      On ART
-    </label>
+                {/* 2️⃣ On ART */}
+                <div className="flex items-center gap-2 min-w-0">
+                  <label className="block text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                    On ART
+                  </label>
 
-    <div className="flex gap-1 flex-wrap min-w-0">
-      {["Yes", "No", "-"].map((opt) => {
-        const isDash = opt === "-";
-        const active =
-          (isDash && !form.hiv_booking_on_art) ||
-          form.hiv_booking_on_art === opt;
+                  <div className="flex gap-1 flex-wrap min-w-0">
+                    {["Yes", "No", "-"].map((opt) => {
+                      const isDash = opt === "-";
+                      const active =
+                        (isDash && !form.hiv_booking_on_art) ||
+                        form.hiv_booking_on_art === opt;
 
-        return (
-          <button
-            key={opt}
-            onClick={() =>
-              updateForm({
-                hiv_booking_on_art: isDash ? "" : opt,
-              })
-            }
-            disabled={isCompleted}
-            className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
-              ${
-                active && !isDash
-                  ? opt === "Yes"
-                    ? "bg-green-600 text-white border-green-600"
-                    : "bg-red-600 text-white border-red-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }
-              ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-            `}
-          >
-            {opt}
-          </button>
-        );
-      })}
-    </div>
-  </div>
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() =>
+                            updateForm({
+                              hiv_booking_on_art: isDash ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
+                          className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
+                            ${
+                              active && !isDash
+                                ? opt === "Yes"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : "bg-red-600 text-white border-red-600"
+                                : "bg-white text-gray-700 border-gray-300"
+                            }
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-  {/* 3️⃣ HIV Test at Booking */}
-  <div className="grid grid-cols-[110px_1fr_auto] items-center gap-1 min-w-0">
-    <label className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">
-      HIV Test at Booking
-    </label>
+                {/* 3️⃣ HIV Test at Booking */}
+                <div className="grid grid-cols-[110px_1fr_auto] items-center gap-1 min-w-0">
+                  <label className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                    HIV Test at Booking
+                  </label>
 
-    <input
-      value={form.hiv_booking_date || ""}
-      onChange={(e) => updateForm({ hiv_booking_date: e.target.value })}
-      disabled={isCompleted}
-      className={`px-2 py-1 text-[12px] border border-[#008A80] rounded-lg w-full min-w-0
-        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
-    />
+                  <input
+                    value={form.hiv_booking_date || ""}
+                    onChange={(e) => updateForm({ hiv_booking_date: e.target.value })}
+                    disabled={isCompleted}
+                    className={`px-2 py-1 text-[12px] border border-[#008A80] rounded-lg w-full min-w-0
+                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                  />
 
-    <div className="flex gap-1 flex-wrap min-w-0">
-      {["Pos", "Neg", "Declined", "-"].map((opt) => {
-        const isDash = opt === "-";
-        const active =
-          (isDash && !form.hiv_booking_result) ||
-          form.hiv_booking_result === opt;
-        const label = opt === "Declined" ? "Dec" : opt;
+                  <div className="flex gap-1 flex-wrap min-w-0">
+                    {["Pos", "Neg", "Declined", "-"].map((opt) => {
+                      const isDash = opt === "-";
+                      const active =
+                        (isDash && !form.hiv_booking_result) ||
+                        form.hiv_booking_result === opt;
+                      const label = opt === "Declined" ? "Dec" : opt;
 
-        return (
-          <button
-            key={opt}
-            onClick={() =>
-              updateForm({
-                hiv_booking_result: isDash ? "" : opt,
-              })
-            }
-            disabled={isCompleted}
-            className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
-              ${
-                active && !isDash
-                  ? opt === "Pos"
-                    ? "bg-green-600 text-white border-green-600"
-                    : opt === "Neg"
-                    ? "bg-red-600 text-white border-red-600"
-                    : "bg-yellow-600 text-white border-yellow-600"
-                  : "bg-white text-gray-700 border-gray-300"
-              }
-              ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-            `}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  </div>
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() =>
+                            updateForm({
+                              hiv_booking_result: isDash ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
+                          className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
+                            ${
+                              active && !isDash
+                                ? opt === "Pos"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : opt === "Neg"
+                                  ? "bg-red-600 text-white border-red-600"
+                                  : "bg-yellow-600 text-white border-yellow-600"
+                                : "bg-white text-gray-700 border-gray-300"
+                            }
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-  {/* 4️⃣ ONLY TWO HIV RETESTS */}
-  {[1, 2].map((n) => (
-    <div
-      key={n}
-      className="grid grid-cols-[110px_1fr_auto] items-center gap-1 min-w-0"
-    >
-      <label className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">
-        HIV Retest {n}
-      </label>
+                {/* 4️⃣ ONLY TWO HIV RETESTS */}
+                {[1, 2].map((n) => (
+                  <div
+                    key={n}
+                    className="grid grid-cols-[110px_1fr_auto] items-center gap-1 min-w-0"
+                  >
+                    <label className="text-[11px] font-semibold text-gray-700 whitespace-nowrap">
+                      HIV Retest {n}
+                    </label>
 
-      <input
-        value={form[`hiv_retest_${n}_date`] || ""}
-        onChange={(e) =>
-          updateForm({ [`hiv_retest_${n}_date`]: e.target.value })
-        }
-        disabled={isCompleted}
-        className={`px-2 py-1 text-[12px] border border-[#008A80] rounded-lg w-full min-w-0
-          ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
-      />
+                    <input
+                      value={form[`hiv_retest_${n}_date`] || ""}
+                      onChange={(e) =>
+                        updateForm({ [`hiv_retest_${n}_date`]: e.target.value })
+                      }
+                      disabled={isCompleted}
+                      className={`px-2 py-1 text-[12px] border border-[#008A80] rounded-lg w-full min-w-0
+                        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                    />
 
-      <div className="flex gap-1 flex-wrap min-w-0">
-        {["Pos", "Neg", "Declined", "-"].map((opt) => {
-          const isDash = opt === "-";
-          const active =
-            (isDash && !form[`hiv_retest_${n}_result`]) ||
-            form[`hiv_retest_${n}_result`] === opt;
-          const label = opt === "Declined" ? "Dec" : opt;
+                    <div className="flex gap-1 flex-wrap min-w-0">
+                      {["Pos", "Neg", "Declined", "-"].map((opt) => {
+                        const isDash = opt === "-";
+                        const active =
+                          (isDash && !form[`hiv_retest_${n}_result`]) ||
+                          form[`hiv_retest_${n}_result`] === opt;
+                        const label = opt === "Declined" ? "Dec" : opt;
 
-          return (
-            <button
-              key={opt}
-              onClick={() =>
-                updateForm({
-                  [`hiv_retest_${n}_result`]: isDash ? "" : opt,
-                })
-              }
-              disabled={isCompleted}
-              className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
-                ${
-                  active && !isDash
-                    ? opt === "Pos"
-                      ? "bg-green-600 text-white border-green-600"
-                      : opt === "Neg"
-                      ? "bg-red-600 text-white border-red-600"
-                      : "bg-yellow-600 text-white border-yellow-600"
-                    : "bg-white text-gray-700 border-gray-300"
-                }
-                ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-              `}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  ))}
+                        return (
+                          <button
+                            key={opt}
+                            onClick={() =>
+                              updateForm({
+                                [`hiv_retest_${n}_result`]: isDash ? "" : opt,
+                              })
+                            }
+                            disabled={isCompleted}
+                            className={`px-1.5 py-0.5 text-[10px] rounded border font-semibold
+                              ${
+                                active && !isDash
+                                  ? opt === "Pos"
+                                    ? "bg-green-600 text-white border-green-600"
+                                    : opt === "Neg"
+                                    ? "bg-red-600 text-white border-red-600"
+                                    : "bg-yellow-600 text-white border-yellow-600"
+                                  : "bg-white text-gray-700 border-gray-300"
+                              }
+                              ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                            `}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
 
-</div>
+              </div>
 
 
 

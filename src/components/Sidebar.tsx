@@ -76,7 +76,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       if (!res.ok) throw new Error("Failed to load");
 
       const data = await res.json();
-      setForms(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setForms(list);
+
+      // ✅ Auto-select first form if nothing is selected yet
+      if (!selectedFormId && list.length > 0) {
+        onSelectForm(list[0].id);
+      }
+
     } catch (err) {
       console.error(err);
     } finally {

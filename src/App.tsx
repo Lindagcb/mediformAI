@@ -76,7 +76,7 @@ const App: React.FC = () => {
     {/* Center: App title (now left-aligned within middle column) */}
     <div className="flex justify-start">
       <p className="text-4xl font-semibold text-[#008A80] tracking-wide">
-        MediForm AI
+        Maternity Case Record
       </p>
     </div>
 
@@ -112,7 +112,9 @@ const App: React.FC = () => {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
+      <div className="max-w-[800px]">
+  <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
+</div>
       <DataPanel
         apiBase={API_BASE}
         formId={selectedFormId}

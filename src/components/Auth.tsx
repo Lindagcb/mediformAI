@@ -65,7 +65,7 @@ export function Auth({ onAuthSuccess }: AuthProps) {
     className="h-48 w-auto object-contain mb-3"
   />
   <p className="text-2xl font-semibold text-[#008A80] tracking-wide leading-tight">
-    MediForm AI
+    Maternity Case Record
   </p>
 </div>
 

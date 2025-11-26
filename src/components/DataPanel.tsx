@@ -124,7 +124,44 @@ useEffect(() => {
 
       // ----------------------------------------------
       setInvestigations(data.investigations || []);
-      setCounselling(data.counselling || []);
+
+      // FIXED order of topics
+      const FIXED_COUNSELLING_TOPICS = [
+        "Fetal movements",
+        "Parental preparedness",
+        "Nutrition",
+        "Danger signs",
+        "HIV",
+        "Mental health",
+        "Alcohol",
+        "Tobacco",
+        "Substances",
+        "Domestic violence",
+        "Labour and birth preparedness",
+        "Breast care",
+        "Infant feeding"
+      ];
+
+      // Build perfect list aligned with record numbers
+      const mergedCounselling = FIXED_COUNSELLING_TOPICS.map((topic, index) => {
+        const row = (data.counselling || []).find(
+          r => r.record_number === index + 1
+        );
+
+        return {
+          record_number: index + 1,
+          topic,
+          date_1: row?.date_1 || "",
+          date_2: row?.date_2 || ""
+        };
+      });
+
+      setCounselling(mergedCounselling);
+
+
+
+
+
       setIsCompleted(!!data.form?.is_completed);
 
     } catch (err) {
@@ -324,8 +361,23 @@ const hivStatusField = (
 function simpleDateFix(value) {
   if (!value || typeof value !== "string") return value;
 
-  // Remove brackets or notes, e.g. (Che)
+  // Remove brackets or notes, e.g. (GNR)
   value = value.replace(/\(.*?\)/g, "").trim();
+
+  // Convert space-separated formats e.g. "07 10 25" → "07/10/25"
+  if (/^\d{2}\s\d{2}\s\d{2}$/.test(value)) {
+    const [d, m, y] = value.split(" ");
+    return `${d}/${m}/20${y}`;
+  }
+
+  // Convert space-separated formats like "30 0125" or "30 01 25"
+  if (/^\d{2}\s?\d{2}\s?\d{2}$/.test(value.replace(/\s+/g, ""))) {
+    const cleaned = value.replace(/\s+/g, "");
+    const d = cleaned.slice(0, 2);
+    const m = cleaned.slice(2, 4);
+    const y = cleaned.slice(4, 6);
+    return `${d}/${m}/20${y}`;
+  }
 
   // If already dd/mm/yyyy, keep it
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
@@ -352,12 +404,13 @@ function simpleDateFix(value) {
   if (/^\d{6}$/.test(value)) {
     const d = value.slice(0, 2);
     const m = value.slice(2, 4);
-    const y = "20" + value.slice(4, 6);
-    return `${d}/${m}/${y}`;
+    const y = value.slice(4, 6);
+    return `${d}/${m}/20${y}`;
   }
 
-  return value; // leave unknown formats unchanged
+  return value; // anything else stays unchanged
 }
+
 
 
 
@@ -1170,38 +1223,42 @@ return (
 
               <div className="grid grid-cols-3 gap-4">
                 {/* === Compact vital fields (unit-based) === */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col">
+                  <label className="text-xs font-semibold text-gray-700 mb-1">BP</label>
 
-                  {/* SYSTOLIC */}
-                  <input
-                    disabled={isCompleted}
-                    value={form.bp || ""}   // systolic comes from form.bp
-                    onChange={(e) => {
-                      const systolic = e.target.value.replace(/[^\d]/g, "");
-                      updateForm({ bp: systolic });
-                    }}
-                    className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
-                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
-                    placeholder="120"
-                  />
+                  <div className="flex items-center gap-2">
+                    {/* SYSTOLIC */}
+                    <input
+                      disabled={isCompleted}
+                      value={form.bp || ""}
+                      onChange={(e) => {
+                        const systolic = e.target.value.replace(/[^\d]/g, "");
+                        updateForm({ bp: systolic });
+                      }}
+                      className={`w-14 px-2 py-1 text-sm border border-[#008A80] rounded-lg
+                        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                      placeholder="120"
+                    />
 
-                  <span className="font-semibold text-gray-700">/</span>
+                    <span className="font-semibold text-gray-700">/</span>
 
-                  {/* DIASTOLIC */}
-                  <input
-                    disabled={isCompleted}
-                    value={form.bp_dia || ""}  // diastolic comes from NEW FIELD
-                    onChange={(e) => {
-                      const diastolic = e.target.value.replace(/[^\d]/g, "");
-                      updateForm({ bp_dia: diastolic });
-                    }}
-                    className={`w-12 px-2 py-1 text-sm border border-[#008A80] rounded-lg
-                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
-                    placeholder="70"
-                  />
+                    {/* DIASTOLIC */}
+                    <input
+                      disabled={isCompleted}
+                      value={form.bp_dia || ""}
+                      onChange={(e) => {
+                        const diastolic = e.target.value.replace(/[^\d]/g, "");
+                        updateForm({ bp_dia: diastolic });
+                      }}
+                      className={`w-14 px-2 py-1 text-sm border border-[#008A80] rounded-lg
+                        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                      placeholder="70"
+                    />
 
-                  <span className="text-xs text-gray-600">mmHg</span>
+                    <span className="text-xs text-gray-600 whitespace-nowrap">mmHg</span>
+                  </div>
                 </div>
+
 
 
                 <div className="max-w-[120px]">
@@ -1524,7 +1581,6 @@ return (
 
 
             {/* Screening for Gestational Diabetes */}
-              {/* Screening for Gestational Diabetes */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               Screening for Gestational Diabetes
@@ -1539,7 +1595,7 @@ return (
                   updateForm({ screening_for_gestational_diabetes_1: e.target.value })
                 }
                 disabled={isCompleted}
-                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                className={`w-[100px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
                   focus:ring-2 focus:ring-[#008A80] text-gray-900
                   ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
               />
@@ -1551,7 +1607,7 @@ return (
                   updateForm({ screening_for_gestational_diabetes_2: e.target.value })
                 }
                 disabled={isCompleted}
-                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                className={`w-[100px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
                   focus:ring-2 focus:ring-[#008A80] text-gray-900
                   ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
               />
@@ -1568,7 +1624,7 @@ return (
                   updateForm({ screening_for_gestational_diabetes_3: e.target.value })
                 }
                 disabled={isCompleted}
-                className={`w-[120px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
+                className={`w-[100px] px-3 py-1.5 text-sm border border-[#008A80] rounded-lg
                   focus:ring-2 focus:ring-[#008A80] text-gray-900
                   ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
               />
@@ -1579,168 +1635,200 @@ return (
 
 
 
-            {/* HIV Section — EXACT MCR LAYOUT */}
-                <div className="space-y-4">
+            {/* HIV Section — with dash option */}
+              <div className="space-y-4">
 
-                  {/* 1️⃣ HIV Status at Booking */}
-                  <div className="flex items-center gap-4">
-                    <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
-                      HIV Status at Booking
-                    </label>
+                {/* 1️⃣ HIV Status at Booking */}
+                <div className="flex items-center gap-4">
+                  <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
+                    HIV Status at Booking
+                  </label>
 
-                    <div className="flex gap-2">
-                      {["Unknown", "Pos", "Neg", "Declined"].map((opt) => (
+                  <div className="flex gap-2 flex-wrap">
+                    {["Unknown", "Pos", "Neg", "-"].map((opt) => {
+                      const active =
+                        (opt === "-" && !form.hiv_status_at_booking) ||
+                        form.hiv_status_at_booking === opt;
+
+                      return (
                         <button
                           key={opt}
-                          onClick={() => updateForm({ hiv_status_at_booking: opt })}
+                          onClick={() =>
+                            updateForm({
+                              hiv_status_at_booking: opt === "-" ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
                           className={`px-2 py-1 text-xs font-semibold rounded border
                             ${
-                              form.hiv_status_at_booking === opt
+                              active && opt !== "-"
                                 ? opt === "Pos"
                                   ? "bg-green-600 text-white border-green-600"
                                   : opt === "Neg"
                                   ? "bg-red-600 text-white border-red-600"
-                                  : opt === "Declined"
-                                  ? "bg-yellow-600 text-white border-yellow-600"
-                                  : "bg-blue-600 text-white border-blue-600" // Unknown
-                                : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                            }`}
+                                  : "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-gray-700 border-gray-300"
+                            }
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
                         >
                           {opt}
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
+                </div>
 
-                  {/* HIV Test at Booking — header above date */}
-                      <div className="flex flex-col gap-1">
+                {/* 2️⃣ On ART Row */}
+                <div className="flex items-center gap-4">
+                  <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
+                    On ART
+                  </label>
 
-                        <span className="text-xs font-semibold text-gray-700">
-                          HIV Test at Booking
-                        </span>
+                  <div className="flex gap-2 flex-wrap">
+                    {["Yes", "No", "-"].map((opt) => {
+                      const active =
+                        (opt === "-" && !form.hiv_booking_on_art) ||
+                        form.hiv_booking_on_art === opt;
 
-                        <div className="flex items-center gap-3 flex-wrap">
-
-                          {/* Date */}
-                          <input
-                            type="text"
-                            value={form.hiv_booking_date || ""}
-                            onChange={(e) => updateForm({ hiv_booking_date: e.target.value })}
-                            disabled={isCompleted}
-                            className={`w-[100px] px-2 py-1 text-xs border border-[#008A80] rounded-lg
-                              ${isCompleted ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
-                          />
-
-                          {/* Result */}
-                          <span className="text-xs font-semibold text-gray-700">Result</span>
-
-                          <div className="flex gap-1">
-                            {["Pos", "Neg", "Declined", ""].map((opt) => (
-                              <button
-                                key={opt || "unset"}
-                                onClick={() => updateForm({ hiv_booking_result: opt })}
-                                disabled={isCompleted}
-                                className={`px-2 py-0.5 text-xs rounded border font-semibold
-                                  ${
-                                    form.hiv_booking_result === opt
-                                      ? "bg-[#008A80] text-white border-[#008A80]"
-                                      : "bg-white text-gray-700 border-gray-300"
-                                  }
-                                  ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-                                `}
-                              >
-                                {opt || "-"}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* On ART */}
-                          <span className="text-xs font-semibold text-gray-700 ml-2">
-                            On ART
-                          </span>
-
-                          {/* YES / NO buttons — USING THE SAME PATTERN AS EVERYWHERE ELSE */}
-                          <div className="flex gap-1">
-                            {yesNo.map((opt) => (
-                              <button
-                                key={opt || "unset"}
-                                onClick={() => updateForm({ hiv_booking_on_art: opt })}
-                                disabled={isCompleted}
-                                className={`px-2 py-0.5 text-xs rounded border font-semibold
-                                  ${
-                                    form.hiv_booking_on_art === opt
-                                      ? "bg-[#008A80] text-white border-[#008A80]"
-                                      : "bg-white text-gray-700 border-gray-300"
-                                  }
-                                  ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
-                                `}
-                              >
-                                {opt || "-"}
-                              </button>
-                            ))}
-                          </div>
-
-                        </div>
-                      </div>
-
-
-
-
-                  {/* 4️⃣ HIV Retests 1–3 — each on one line */}
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} className="flex items-center gap-4">
-
-                      {/* Label */}
-                      <label className="block text-xs font-semibold text-gray-700 whitespace-nowrap">
-                        HIV Retest {n}
-                      </label>
-
-                      {/* Date */}
-                      <input
-                        value={form[`hiv_retest_${n}_date`] || ""}
-                        onChange={(e) =>
-                          updateForm({ [`hiv_retest_${n}_date`]: e.target.value })
-                        }
-                        disabled={isCompleted}
-                        className={`w-[130px] px-3 py-1.5 text-sm border border-[#008A80] Border rounded-lg
-                          focus:ring-2 focus:ring-[#008A80] text-gray-900
-                          ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`}
-                        placeholder=""
-                      />
-
-                      {/* Result */}
-                      <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">
-                        Result
-                      </span>
-
-                      <div className="flex gap-1">
-                        {["Pos", "Neg", "Declined", ""].map((opt) => (
-                          <button
-                            key={opt || "unset"}
-                            onClick={() =>
-                              updateForm({ [`hiv_retest_${n}_result`]: opt })
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() =>
+                            updateForm({
+                              hiv_booking_on_art: opt === "-" ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
+                          className={`px-2 py-1 text-xs font-semibold rounded border
+                            ${
+                              active && opt !== "-"
+                                ? opt === "Yes"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : "bg-red-600 text-white border-red-600"
+                                : "bg-white text-gray-700 border-gray-300"
                             }
-                            className={`px-2 py-0.5 text-xs font-semibold rounded border
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+
+                {/* 3️⃣ HIV Test at Booking */}
+                <div className="grid grid-cols-[140px_1fr_auto] items-center gap-2">
+                  <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                    HIV Test at Booking
+                  </label>
+
+                  <input
+                    value={form.hiv_booking_date || ""}
+                    onChange={(e) => updateForm({ hiv_booking_date: e.target.value })}
+                    disabled={isCompleted}
+                    className={`px-2 py-1 text-sm border border-[#008A80] rounded-lg w-full
+                      ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                  />
+
+                  <div className="flex gap-1 flex-wrap">
+                    {["Pos", "Neg", "Declined", "-"].map((opt) => {
+                      const active =
+                        (opt === "-" && !form.hiv_booking_result) ||
+                        form.hiv_booking_result === opt;
+
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() =>
+                            updateForm({
+                              hiv_booking_result: opt === "-" ? "" : opt,
+                            })
+                          }
+                          disabled={isCompleted}
+                          className={`px-2 py-0.5 text-xs rounded border font-semibold
+                            ${
+                              active && opt !== "-"
+                                ? opt === "Pos"
+                                  ? "bg-green-600 text-white border-green-600"
+                                  : opt === "Neg"
+                                  ? "bg-red-600 text-white border-red-600"
+                                  : "bg-yellow-600 text-white border-yellow-600"
+                                : "bg-white text-gray-700 border-gray-300"
+                            }
+                            ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                          `}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+
+                {/* 4️⃣ HIV RETEST 1–3 */}
+                {[1, 2, 3].map((n) => (
+                  <div
+                    key={n}
+                    className="grid grid-cols-[140px_1fr_auto] items-center gap-2"
+                  >
+                    <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                      HIV Retest {n}
+                    </label>
+
+                    <input
+                      value={form[`hiv_retest_${n}_date`] || ""}
+                      onChange={(e) =>
+                        updateForm({ [`hiv_retest_${n}_date`]: e.target.value })
+                      }
+                      disabled={isCompleted}
+                      className={`px-2 py-1 text-sm border border-[#008A80] rounded-lg w-full
+                        ${isCompleted ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
+                    />
+
+                    <div className="flex gap-1 flex-wrap">
+                      {["Pos", "Neg", "Declined", "-"].map((opt) => {
+                        const active =
+                          (opt === "-" && !form[`hiv_retest_${n}_result`]) ||
+                          form[`hiv_retest_${n}_result`] === opt;
+
+                        return (
+                          <button
+                            key={opt}
+                            onClick={() =>
+                              updateForm({
+                                [`hiv_retest_${n}_result`]: opt === "-" ? "" : opt,
+                              })
+                            }
+                            disabled={isCompleted}
+                            className={`px-2 py-0.5 text-xs rounded border font-semibold
                               ${
-                                form[`hiv_retest_${n}_result`] === opt
+                                active && opt !== "-"
                                   ? opt === "Pos"
                                     ? "bg-green-600 text-white border-green-600"
                                     : opt === "Neg"
                                     ? "bg-red-600 text-white border-red-600"
-                                    : opt === "Declined"
-                                    ? "bg-yellow-600 text-white border-yellow-600"
-                                    : "bg-gray-500 text-white border-gray-500"
-                                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-                              }`}
+                                    : "bg-yellow-600 text-white border-yellow-600"
+                                  : "bg-white text-gray-700 border-gray-300"
+                              }
+                              ${isCompleted ? "cursor-not-allowed opacity-60" : ""}
+                            `}
                           >
-                            {opt || "-"}
+                            {opt}
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  </div>
+                ))}
 
-                </div>
+              </div>
+
+
+
 
 
 
@@ -2029,31 +2117,64 @@ return (
 
 
   <div className="text-[#008A80] border border-[#008A80]Border rounded-lg p-3 space-y-3 text-xs">
-    {/* Row 1: Mental health screening + score */}
-    <div className="grid grid-cols-3 gap-3 items-center">
-      {yesNoField(
-        "Mental Health Screening",
-        form.screening_performed,
-        (v) => updateForm({ screening_performed: v })
-      )}
-      {field("Score", form.mental_health_score, (v) =>
-        updateForm({ mental_health_score: v })
-      )}
-      {yesNoField(
-        "Discussed and Noted in Case Record",
-        form.discussed_in_record,
-        (v) => updateForm({ discussed_in_record: v })
-      )}
-    </div>
+    {/* LINE 1: Screening + Score */}
+      <div className="flex items-center gap-2 whitespace-nowrap">
+        {yesNoField(
+          <span className="mr-4">Mental Health Screening</span>,
+          form.screening_performed,
+          (v) => updateForm({ screening_performed: v })
+        )}
 
-    {/* Row 2: Referral */}
-    <div className="grid grid-cols-1 gap-3">
-      {field(
-        "Where Referred for Mental Health",
-        form.referred_to,
-        (v) => updateForm({ referred_to: v })
-      )}
-    </div>
+
+        <div className="flex items-center gap-2">
+  <span className="text-xs font-semibold text-gray-700">Score</span>
+  <input
+    disabled={isCompleted}
+    value={form.mental_health_score || ""}
+    onChange={(e) => updateForm({ mental_health_score: e.target.value })}
+    className="px-2 py-1 text-sm border border-[#008A80] rounded-lg w-20"
+  />
+</div>
+
+      </div>
+
+      {/* LINE 2: Discussed and noted (full width, separate row) */}
+      <div className="mt-2 flex items-center gap-4">
+        <label className="text-xs font-semibold text-gray-700">
+          Discussed and Noted in Case Record
+        </label>
+
+          <div className="flex gap-1">
+            {yesNo.map((opt) => (
+              <button
+                key={opt || "unset"}
+                onClick={() => updateForm({ discussed_in_record: opt })}
+                className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                  form.discussed_in_record === opt
+                    ? opt === "Yes"
+                      ? "bg-green-600 text-white"
+                      : opt === "No"
+                      ? "bg-red-600 text-white"
+                      : "bg-gray-500 text-white"
+                    : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                {opt || "-"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+
+      {/* LINE 3: Referred */}
+      <div className="mt-2">
+        {field(
+          "Where Referred for Mental Health",
+          form.referred_to,
+          (v) => updateForm({ referred_to: v })
+        )}
+      </div>
+
   </div>
 </section>
 
@@ -2162,47 +2283,50 @@ return (
                 <tbody>
                   {counselling.map((row, i) => (
                     <tr key={i} className="border-b border-[#008A80] Border">
+                      
+                      {/* Record number */}
                       <td className="p-1.5 text-[#008A80] font-bold">
                         {row.record_number ?? i + 1}
                       </td>
-                      {/* Topic (LABEL, not input) */}
-                          <td className="p-1.5 text-[#008A80] font-semibold whitespace-nowrap">
-                            {row.topic}
-                          </td>
 
-                          {/* Date 1 */}
-                          <td className="p-1.5">
-                            <input
-                              className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
-                              value={row.date_1 || ""}
-                              onChange={(e) =>
-                                setCounselling((prev) =>
-                                  prev.map((r, idx) =>
-                                    idx === i ? { ...r, date_1: e.target.value } : r
-                                  )
-                                )
-                              }
-                            />
-                          </td>
+                      {/* Topic (fixed label – never editable) */}
+                      <td className="p-1.5 text-[#008A80] font-semibold whitespace-nowrap">
+                        {row.topic}
+                      </td>
 
-                          {/* Date 2 */}
-                          <td className="p-1.5">
-                            <input
-                              className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
-                              value={row.date_2 || ""}
-                              onChange={(e) =>
-                                setCounselling((prev) =>
-                                  prev.map((r, idx) =>
-                                    idx === i ? { ...r, date_2: e.target.value } : r
-                                  )
-                                )
-                              }
-                            />
-                          </td>
+                      {/* Date 1 */}
+                      <td className="p-1.5">
+                        <input
+                          className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                          value={row.date_1 || ""}
+                          onChange={(e) =>
+                            setCounselling((prev) =>
+                              prev.map((r, idx) =>
+                                idx === i ? { ...r, date_1: e.target.value } : r
+                              )
+                            )
+                          }
+                        />
+                      </td>
 
+                      {/* Date 2 */}
+                      <td className="p-1.5">
+                        <input
+                          className="w-full border border-[#008A80] Border rounded px-1.5 py-1"
+                          value={row.date_2 || ""}
+                          onChange={(e) =>
+                            setCounselling((prev) =>
+                              prev.map((r, idx) =>
+                                idx === i ? { ...r, date_2: e.target.value } : r
+                              )
+                            )
+                          }
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+
               </table>
             </div>
           </section>

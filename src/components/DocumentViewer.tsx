@@ -7,6 +7,8 @@ import {
   Loader2,
 } from "lucide-react";
 import PdfCanvasViewer from "./PdfCanvasViewer";
+import { useRef } from "react";
+
 
 interface DocumentViewerProps {
   apiBase: string;
@@ -44,6 +46,49 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
       setLoading(false);
     }
   };
+
+  const viewerRef = useRef<HTMLDivElement>(null);
+const [isDragging, setIsDragging] = useState(false);
+const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+const [scrollStart, setScrollStart] = useState({ left: 0, top: 0 });
+
+const handleMouseDown = (e: React.MouseEvent) => {
+  const viewer = viewerRef.current;
+  if (!viewer) return;
+
+  setIsDragging(true);
+  setStartPos({ x: e.clientX, y: e.clientY });
+  setScrollStart({ left: viewer.scrollLeft, top: viewer.scrollTop });
+
+  viewer.style.cursor = "grabbing";
+
+  // Capture mouse movement globally
+  window.addEventListener("mousemove", handleMouseMove);
+  window.addEventListener("mouseup", handleMouseUp);
+};
+
+const handleMouseMove = (e: MouseEvent) => {
+  if (!isDragging) return;
+
+  const viewer = viewerRef.current;
+  if (!viewer) return;
+
+  const dx = e.clientX - startPos.x;
+  const dy = e.clientY - startPos.y;
+
+  viewer.scrollLeft = scrollStart.left - dx;
+  viewer.scrollTop = scrollStart.top - dy;
+};
+
+const handleMouseUp = () => {
+  setIsDragging(false);
+  const viewer = viewerRef.current;
+  if (viewer) viewer.style.cursor = "grab";
+
+  window.removeEventListener("mousemove", handleMouseMove);
+  window.removeEventListener("mouseup", handleMouseUp);
+};
+
 
   const getProxyUrl = (form: any): string | null => {
     if (!form) return null;
@@ -132,7 +177,11 @@ const DocumentViewer: React.FC<DocumentViewerProps> = ({ apiBase, formId }) => {
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 overflow-auto p-6">
+      <div
+        ref={viewerRef}
+        className="flex-1 overflow-auto p-6 cursor-grab"
+        onMouseDown={handleMouseDown}
+      >
         <PdfCanvasViewer url={fileUrl} zoom={zoom} rotation={rotation} />
       </div>
 

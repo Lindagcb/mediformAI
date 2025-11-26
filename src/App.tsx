@@ -101,27 +101,32 @@ const App: React.FC = () => {
 
 
 
-    {/* BODY */}
-    <div className="flex-1 flex overflow-hidden">
-      <Sidebar
-        apiBase={API_BASE}
-        onSelectForm={handleSelectForm}
-        onUploadComplete={handleUploadComplete}
-        selectedFormId={selectedFormId}
-        refreshTrigger={refreshTrigger}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-      />
-      <div className="max-w-[800px]">
-  <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
+   {/* BODY */}
+<div className="flex-1 flex overflow-y-hidden overflow-x-auto">
+
+  <Sidebar
+    apiBase={API_BASE}
+    onSelectForm={handleSelectForm}
+    onUploadComplete={handleUploadComplete}
+    selectedFormId={selectedFormId}
+    refreshTrigger={refreshTrigger}
+    collapsed={sidebarCollapsed}
+    onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+  />
+
+  <div className="flex-[0.75] min-w-[750px]">
+    <DocumentViewer apiBase={API_BASE} formId={selectedFormId} />
+  </div>
+
+  <DataPanel
+    apiBase={API_BASE}
+    formId={selectedFormId}
+    onFormDeleted={handleFormDeleted}
+    onFormUpdated={() => setRefreshTrigger((p) => p + 1)}
+  />
+
 </div>
-      <DataPanel
-        apiBase={API_BASE}
-        formId={selectedFormId}
-        onFormDeleted={handleFormDeleted}
-        onFormUpdated={() => setRefreshTrigger((p) => p + 1)}
-      />
-    </div>
+
   </div>
 );
 

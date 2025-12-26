@@ -2423,21 +2423,23 @@ return (
               ))}
             </div>
 
-            {/* Row 2: Management & educational info */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Row 2: Management info */}
+            <div>
               {yesNoField(
                 "All Management Plans Discussed with Patient",
                 form.counselling_done,
                 (v) => updateForm({ counselling_done: v })
               )}
+            </div>
+            {/* Row 3: educational info */}    
+            <div>
               {yesNoField(
                 "Educational Material Given on Pregnancy and Patient Rights",
                 form.educational_material_given,
                 (v) => updateForm({ educational_material_given: v })
               )}
             </div>
-
-            {/* Row 3: Tubal counselling */}
+            {/* Row 4: Tubal counselling */}
             <div>
               {yesNoField(
                 "If Tubal Ligation Selected, Adequate Counselling Given",
